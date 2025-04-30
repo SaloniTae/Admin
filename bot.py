@@ -66,7 +66,7 @@ async def qr_handler(_, message):
         )
 
     # unique-ify to force new QR each time
-    url = message.command[1].strip() + f"?r={random.randint(1e4,1e6)}"
+    url = message.command[1].strip() + f"?r={random.randint(int(1e4), int(1e6))}"
     await message.reply_text("🔧 Generating your QR…", quote=True)
 
     # write out the JS helper once to a temp file
