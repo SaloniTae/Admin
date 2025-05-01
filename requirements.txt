@@ -1,3 +1,4 @@
+PyGithub
 Flask
 beautifulsoup4
 html5lib
