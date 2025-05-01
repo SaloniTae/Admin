@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 API_KEY = os.environ.get("API_KEY", "abcd")
 MEDIA_FOLDER = os.environ.get(
     "MEDIA_FOLDER",
-    "/home/htmltoimage/mysite/media/html_to_image"
+    os.path.join(os.getcwd(), "media/html_to_image")
 )
 os.makedirs(MEDIA_FOLDER, exist_ok=True)
 
