@@ -1,105 +1,118 @@
 #!/usr/bin/env python3
 import os
 import random
+import base64
+from io import BytesIO
 import subprocess
 import tempfile
-from io import BytesIO
+import requests
+from PIL import Image
 from pyrogram import Client, filters
+from qrcode_styled import QRCodeStyled, ERROR_CORRECT_H
+from qrcode_styled.pil.image import PilStyledImage
 
-# ─── CONFIG ───────────────────────────────────────────────────────────────────
-# Replace these with your own or set via environment variables
 API_ID    = int(os.getenv("API_ID", "25270711"))
-API_HASH  = os.getenv("API_HASH",  "6bf18f3d9519a2de12ac1e2e0f5c383e")
+API_HASH  = os.getenv("API_HASH", "6bf18f3d9519a2de12ac1e2e0f5c383e")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7140092976:AAFtmOBKi-mIoVighcf4XXassHimU2CtlR8")
 
-# The image URL to embed
-IMAGE_URL = (
-    "https://res.cloudinary.com/djzfoukhz/image/upload/"
-    "v1746022425/Untitled_design_20250430_011630_0000_icacxu.png"
-)
-# ──────────────────────────────────────────────────────────────────────────────
-
-# This is the JS code for qr-code-styling (no shebang line)
-QR_JS = r"""const fs        = require("fs");
-const nodeCanvas= require("canvas");
-const { JSDOM } = require("jsdom");
-const { QRCodeStyling } = require(
-  "qr-code-styling/lib/qr-code-styling.common.js"
-);
-
-async function main() {
-  const [,, dataUrl, imageUrl, outPath] = process.argv;
-  const qr = new QRCodeStyling({
-    type:        "canvas",
-    width:       300,
-    height:      300,
-    data:        dataUrl,
-    image:       imageUrl,
-    margin:      0,
-    qrOptions:   { typeNumber: 0, mode: "Byte", errorCorrectionLevel: "H" },
-    imageOptions:{ saveAsBlob: true, hideBackgroundDots: true, imageSize: 0.4, margin: 0 },
-    dotsOptions: { type: "extra-rounded", color: "#ffffff", roundSize: true },
-    backgroundOptions:      { round: 0, color: "#000000" },
-    cornersSquareOptions:   { type: "extra-rounded", color: "#ffffff" },
-    cornersDotOptions:      { type: "dot",          color: "#ffffff" }
-  }, {
-    canvas: nodeCanvas,
-    jsdom:  new JSDOM().window
-  });
-
-  const buffer = await qr.getRawData("png");
-  fs.writeFileSync(outPath, buffer);
-}
-
-main().catch(e=>{ console.error(e); process.exit(1); });
-"""
-
+TEMPLATE_URL = "https://i.postimg.cc/4y0GJPXN/QRTemplate.png"
 app = Client("styled_qr_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+def html_to_png_wkhtmltoimage(html: str, width: int, height: int) -> bytes:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode='w', encoding='utf-8') as html_file:
+        html_file.write(html)
+        html_path = html_file.name
+
+    png_path = html_path.replace(".html", ".png")
+
+    cmd = [
+        "wkhtmltoimage",
+        "--width", str(width),
+        "--height", str(height),
+        "--disable-smart-width",
+        html_path,
+        png_path
+    ]
+    subprocess.run(cmd, check=True)
+
+    with open(png_path, "rb") as img_file:
+        result = img_file.read()
+
+    os.remove(html_path)
+    os.remove(png_path)
+
+    return result
 
 @app.on_message(filters.command("qr") & filters.private)
 async def qr_handler(_, message):
     if len(message.command) < 2:
-        return await message.reply_text(
-            "Usage:\n"
-            "`/qr https://example.com`\n\n"
-            "Generates a 300×300 styled QR (H-level) with your image embedded.",
-            quote=True
-        )
+        return await message.reply_text("Usage: /qr https://example.com", quote=True)
 
-    # 1) Build a unique URL so each QR differs
     raw_url = message.command[1].strip()
-    suffix = random.randint(10_000, 1_000_000)
-    data_url = f"{raw_url}?r={suffix}"
+    data_url = f"{raw_url}?r={random.randint(0,999999)}"
+    await message.reply_text("🔧 Generating your QR + template…", quote=True)
+    print("[INFO] Data URL:", data_url)
 
-    await message.reply_text("🔧 Generating your QR…", quote=True)
+    qr = QRCodeStyled(
+        version=None,
+        error_correction=ERROR_CORRECT_H,
+        border=1,
+        box_size=32,
+        image_factory=PilStyledImage,
+        mask_pattern=None
+    )
+    buf = BytesIO()
+    qr_img = qr.get_image(data=data_url, image=None, optimize=20)
+    qr_img.save(buf, format="PNG")
+    buf.seek(0)
 
-    # 2) Write out the JS helper to a temp file
-    js_fd, js_path = tempfile.mkstemp(suffix=".js")
-    os.write(js_fd, QR_JS.lstrip("\n").encode("utf-8"))
-    os.close(js_fd)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    qr_data_uri = f"data:image/png;base64,{b64}"
+    print("[INFO] QR data URI length:", len(qr_data_uri))
 
-    # 3) Prepare a temp output PNG path
-    _, out_png = tempfile.mkstemp(suffix=".png")
+    tpl_resp = requests.get(TEMPLATE_URL)
+    tpl_resp.raise_for_status()
+    tpl_img = Image.open(BytesIO(tpl_resp.content))
+    tpl_w, tpl_h = tpl_img.size
+    print(f"[INFO] Template size: {tpl_w}×{tpl_h}")
 
-    try:
-        # 4) Invoke Node.js to generate the QR
-        subprocess.run(
-            ["node", js_path, data_url, IMAGE_URL, out_png],
-            check=True, capture_output=True
-        )
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>QR on Template</title>
+  <style>
+    .container {{
+      position: relative;
+      width: {tpl_w}px;
+      height: {tpl_h}px;
+      overflow: hidden;
+    }}
+    .container img.bg {{
+      position: absolute;
+      top:0; left:0;
+      width:100%; height:100%;
+    }}
+    .container img.qr {{
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      width: 30%;
+      height: auto;
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img class="bg" src="{TEMPLATE_URL}" alt="Template"/>
+    <img class="qr" src="{qr_data_uri}" alt="QR Code"/>
+  </div>
+</body>
+</html>"""
 
-        # 5) Send the resulting PNG
-        with open(out_png, "rb") as f:
-            await message.reply_photo(f, caption="✅ Here’s your styled QR code!")
-    except subprocess.CalledProcessError as e:
-        err = e.stderr.decode().strip()
-        await message.reply_text(f"❌ Error generating QR:\n{err}", quote=True)
-    finally:
-        # 6) Clean up temp files
-        for path in (js_path, out_png):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+    final_png = html_to_png_wkhtmltoimage(html, tpl_w, tpl_h)
+    print("[INFO] HTML rendered to PNG using wkhtmltoimage")
+    await message.reply_photo(final_png, caption="✅ Here’s your styled QR on the template!")
 
-app.run()
+if __name__ == "__main__":
+    app.run()
