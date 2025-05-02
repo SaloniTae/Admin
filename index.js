@@ -21,6 +21,8 @@ const REPO_OWNER   = process.env.REPO_OWNER   || 'SaloniTae';
 const REPO_NAME    = process.env.REPO_NAME    || 'Admin';
 const BRANCH       = process.env.REPO_BRANCH  || 'main';
 const PATH_PREFIX  = process.env.REPO_PATH    || 'media/html_to_image';
+// Path to the system Chrome on Render (set this in Render’s env, or rely on default)
+const CHROME_PATH  = process.env.CHROME_PATH  || '/usr/bin/google-chrome-stable';
 // ──────────────────────────────────────────────────────────────────────────
 
 // ensure local media folder exists
@@ -46,7 +48,6 @@ app.post('/convert', async (req, res) => {
     // 3) Build standalone HTML if element-only
     let standalone = html;
     if (elementId) {
-      // extract existing <style> tags
       const styleMatches = [...html.matchAll(/<style[\s\S]*?<\/style>/gi)]
         .map(m => m[0])
         .join('\n');
@@ -65,25 +66,25 @@ app.post('/convert', async (req, res) => {
           ${inject}
         </head>
         <body>
-          ${standalone}
+          ${html}
         </body>
         </html>
       `;
     }
 
-    // 4) Launch Puppeteer and load
+    // 4) Launch Puppeteer against Render’s Chrome
     const browser = await puppeteer.launch({
-      args: ['--no-sandbox','--disable-setuid-sandbox']
+      executablePath: CHROME_PATH,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     const page = await browser.newPage();
     await page.setContent(standalone, { waitUntil: 'networkidle0' });
 
-    // 5) Screenshot
+    // 5) Screenshot logic
     const imageName = uuidv4() + '.png';
     const imagePath = path.join(MEDIA_FOLDER, imageName);
 
     if (elementId) {
-      // wait for the target element
       const el = await page.$(`#${elementId}`);
       if (!el) {
         await browser.close();
@@ -108,7 +109,6 @@ app.post('/convert', async (req, res) => {
     const fileContent = await fs.readFile(imagePath);
     const repoPath    = `${PATH_PREFIX}/${imageName}`;
 
-    // Check if file exists on branch
     let sha;
     try {
       const existing = await octokit.repos.getContent({
