@@ -3,7 +3,7 @@
 require('dotenv').config();
 const express        = require('express');
 const bodyParser     = require('body-parser');
-// swap in puppeteer-core so it won't look for its own Chromium download
+// use puppeteer-core to avoid bundled Chromium
 const puppeteer      = require('puppeteer-core');
 const { Octokit }    = require('@octokit/rest');
 const { v4: uuidv4 } = require('uuid');
@@ -16,17 +16,29 @@ app.use(bodyParser.json({ limit: '10mb' }));
 // ── REQUIRED ENV VARS ──────────────────────────────────────────────────────
 const API_KEY      = process.env.API_KEY     || 'abcd';
 const MEDIA_FOLDER = process.env.MEDIA_FOLDER
-  || path.join(process.cwd(), 'media', 'html_to_image');
+                   || path.join(process.cwd(), 'media', 'html_to_image');
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const REPO_OWNER   = process.env.REPO_OWNER   || 'SaloniTae';
 const REPO_NAME    = process.env.REPO_NAME    || 'Admin';
 const BRANCH       = process.env.REPO_BRANCH  || 'main';
 const PATH_PREFIX  = process.env.REPO_PATH    || 'media/html_to_image';
-// Puppeteer executable path: either explicitly set or fallback to Render's Chrome
-const CHROME_PATH  = process.env.PUPPETEER_EXECUTABLE_PATH
-                   || process.env.CHROME_PATH
-                   || '/opt/render/project/.render/chrome/opt/google/chrome';
+// possible Chrome executable locations on Render
+const possibleChromes = [
+  process.env.PUPPETEER_EXECUTABLE_PATH,
+  process.env.CHROME_PATH,
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium-browser',
+  '/usr/bin/chromium'
+];
 // ──────────────────────────────────────────────────────────────────────────
+
+// find the first existing Chrome binary
+const CHROME_PATH = possibleChromes.find(p => p && fs.existsSync(p));
+if (!CHROME_PATH) {
+  console.error('❌ Could not locate a Chrome executable. Tried:', possibleChromes);
+  process.exit(1);
+}
 
 // ensure local media folder exists
 fs.ensureDirSync(MEDIA_FOLDER);
@@ -75,7 +87,7 @@ app.post('/convert', async (req, res) => {
       `;
     }
 
-    // 4) Launch Puppeteer against Render’s Chrome
+    // 4) Launch Puppeteer against the detected Chrome
     const browser = await puppeteer.launch({
       executablePath: CHROME_PATH,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -150,5 +162,5 @@ app.post('/convert', async (req, res) => {
 // start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`⚡️ Puppeteer service listening on port ${PORT}`);
+  console.log(`⚡️ Puppeteer service listening on port ${PORT} using Chrome at ${CHROME_PATH}`);
 });
