@@ -1,13 +1,14 @@
 // index.js
 
 require('dotenv').config();
-const express       = require('express');
-const bodyParser    = require('body-parser');
-const puppeteer     = require('puppeteer');
-const { Octokit }   = require('@octokit/rest');
+const express        = require('express');
+const bodyParser     = require('body-parser');
+// swap in puppeteer-core so it won't look for its own Chromium download
+const puppeteer      = require('puppeteer-core');
+const { Octokit }    = require('@octokit/rest');
 const { v4: uuidv4 } = require('uuid');
-const fs            = require('fs-extra');
-const path          = require('path');
+const fs             = require('fs-extra');
+const path           = require('path');
 
 const app = express();
 app.use(bodyParser.json({ limit: '10mb' }));
@@ -21,8 +22,10 @@ const REPO_OWNER   = process.env.REPO_OWNER   || 'SaloniTae';
 const REPO_NAME    = process.env.REPO_NAME    || 'Admin';
 const BRANCH       = process.env.REPO_BRANCH  || 'main';
 const PATH_PREFIX  = process.env.REPO_PATH    || 'media/html_to_image';
-// Path to the system Chrome on Render (set this in Render’s env, or rely on default)
-const CHROME_PATH  = process.env.CHROME_PATH  || '/usr/bin/google-chrome-stable';
+// Puppeteer executable path: either explicitly set or fallback to Render's Chrome
+const CHROME_PATH  = process.env.PUPPETEER_EXECUTABLE_PATH
+                   || process.env.CHROME_PATH
+                   || '/opt/render/project/.render/chrome/opt/google/chrome';
 // ──────────────────────────────────────────────────────────────────────────
 
 // ensure local media folder exists
@@ -74,9 +77,9 @@ app.post('/convert', async (req, res) => {
 
     // 4) Launch Puppeteer against Render’s Chrome
     const browser = await puppeteer.launch({
-     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-     args: ['--no-sandbox','--disable-setuid-sandbox'],
-});
+      executablePath: CHROME_PATH,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
     const page = await browser.newPage();
     await page.setContent(standalone, { waitUntil: 'networkidle0' });
 
