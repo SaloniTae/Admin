@@ -3,8 +3,8 @@
 require('dotenv').config();
 const express        = require('express');
 const bodyParser     = require('body-parser');
-// use puppeteer-core to avoid bundled Chromium
-const puppeteer      = require('puppeteer-core');
+// switch back to full puppeteer so we can use the "channel" option
+const puppeteer      = require('puppeteer');
 const { Octokit }    = require('@octokit/rest');
 const { v4: uuidv4 } = require('uuid');
 const fs             = require('fs-extra');
@@ -22,23 +22,7 @@ const REPO_OWNER   = process.env.REPO_OWNER   || 'SaloniTae';
 const REPO_NAME    = process.env.REPO_NAME    || 'Admin';
 const BRANCH       = process.env.REPO_BRANCH  || 'main';
 const PATH_PREFIX  = process.env.REPO_PATH    || 'media/html_to_image';
-// possible Chrome executable locations on Render
-const possibleChromes = [
-  process.env.PUPPETEER_EXECUTABLE_PATH,
-  process.env.CHROME_PATH,
-  '/usr/bin/google-chrome-stable',
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium-browser',
-  '/usr/bin/chromium'
-];
 // ──────────────────────────────────────────────────────────────────────────
-
-// find the first existing Chrome binary
-const CHROME_PATH = possibleChromes.find(p => p && fs.existsSync(p));
-if (!CHROME_PATH) {
-  console.error('❌ Could not locate a Chrome executable. Tried:', possibleChromes);
-  process.exit(1);
-}
 
 // ensure local media folder exists
 fs.ensureDirSync(MEDIA_FOLDER);
@@ -87,9 +71,9 @@ app.post('/convert', async (req, res) => {
       `;
     }
 
-    // 4) Launch Puppeteer against the detected Chrome
+    // 4) Launch Puppeteer using the system Chrome Render provides
     const browser = await puppeteer.launch({
-      executablePath: CHROME_PATH,
+      channel: 'chrome',
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     const page = await browser.newPage();
@@ -162,5 +146,5 @@ app.post('/convert', async (req, res) => {
 // start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`⚡️ Puppeteer service listening on port ${PORT} using Chrome at ${CHROME_PATH}`);
+  console.log(`⚡️ Puppeteer service listening on port ${PORT}`);
 });
