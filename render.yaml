@@ -1,7 +1,7 @@
 # Exported from Render on 2025-05-02T15:26:46Z
 services:
 - type: web
-  name: PuppeteerTest
+  name: api.html2image
   runtime: node
   repo: https://github.com/SaloniTae/Admin
   plan: free
