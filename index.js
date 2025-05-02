@@ -4,91 +4,99 @@ import fs from 'fs';
 import path from 'path';
 import { Octokit } from '@octokit/rest';
 import { v4 as uuidv4 } from 'uuid';
-import dotenv from 'dotenv';
 
-dotenv.config();
+// ── 1) HARD-CODED CONFIG ─────────────────────────────────────────────────────
 
-const {
-  GITHUB_TOKEN,
-  REPO_OWNER = 'SaloniTae',
-  REPO_NAME  = 'Admin',
-  REPO_BRANCH= 'main',
-  REPO_PATH  = 'media/html_to_image',
-  PUPPETEER_ARGS,
-} = process.env;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;    // ← Only this one stays in env
+
+const REPO_OWNER   = 'SaloniTae';
+const REPO_NAME    = 'Admin';
+const REPO_BRANCH  = 'main';
+const REPO_PATH    = 'media/html_to_image';
+
+// Puppeteer flags for Render free plan
+const PUPPETEER_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+];
+
+// ── 2) BOILERPLATE ───────────────────────────────────────────────────────────
 
 if (!GITHUB_TOKEN) {
-  console.error('❌ Missing GITHUB_TOKEN');
+  console.error('❌ Missing GITHUB_TOKEN in environment');
   process.exit(1);
 }
 
 const MEDIA_FOLDER = path.join(process.cwd(), 'media');
 fs.mkdirSync(MEDIA_FOLDER, { recursive: true });
 
-const puppeteerArgs = PUPPETEER_ARGS
-  ? PUPPETEER_ARGS.split(',').map(s => s.trim())
-  : ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage'];
-
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 10000;
+
+// ── 3) ROUTE ─────────────────────────────────────────────────────────────────
 
 app.get('/generate', async (req, res) => {
   try {
-    // 1) Define HTML
+    // a) Define your HTML template
     const html = `
-    <html>
-      <head>
-        <style>
-          body { margin:0; padding:40px; font-family:sans-serif; }
-          .card {
-            padding:20px;
-            border-radius:8px;
-            box-shadow:0 2px 8px rgba(0,0,0,0.1);
-            background:#fff;
-          }
-          h1 { font-size:32px; margin:0 0 10px; }
-          p  { font-size:16px; color:#555; }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <h1>Hello, world!</h1>
-          <p>Rendered via node-html-to-image on Node 22.</p>
-        </div>
-      </body>
-    </html>
+      <html>
+        <head>
+          <style>
+            body { margin:0; padding:40px; font-family:sans-serif; }
+            .card {
+              padding:20px;
+              border-radius:8px;
+              box-shadow:0 2px 8px rgba(0,0,0,0.1);
+              background:#fff;
+            }
+            h1 { font-size:32px; margin:0 0 10px; }
+            p  { font-size:16px; color:#555; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>Hello, world!</h1>
+            <p>Rendered via node-html-to-image on Node 22.</p>
+          </div>
+        </body>
+      </html>
     `;
 
-    // 2) Render to local file
+    // b) Render to a local file
     const imageName = `${uuidv4()}.png`;
     const localPath = path.join(MEDIA_FOLDER, imageName);
+
     await render({
       html,
       output: localPath,
-      puppeteerArgs,
+      puppeteerArgs: PUPPETEER_ARGS,
       quality: 100,
     });
+    console.log(`✅ Rendered image to ${localPath}`);
 
-    // 3) Read & encode
-    const buffer = fs.readFileSync(localPath);
+    // c) Read & Base64-encode the file
+    const buffer  = fs.readFileSync(localPath);
     const content = buffer.toString('base64');
 
-    // 4) GitHub API
+    // d) Initialize GitHub client
     const octokit = new Octokit({ auth: GITHUB_TOKEN });
     const repoFilePath = `${REPO_PATH}/${imageName}`;
-    const commitMsg = `Add generated image ${imageName}`;
+    const commitMsg    = `Add generated image ${imageName}`;
 
+    // e) Try to fetch existing file SHA (for update vs. create)
     let sha;
     try {
       const { data: existing } = await octokit.repos.getContent({
-        owner: REPO_OWNER, repo: REPO_NAME,
-        path: repoFilePath, ref: REPO_BRANCH
+        owner: REPO_OWNER,
+        repo:  REPO_NAME,
+        path:  repoFilePath,
+        ref:   REPO_BRANCH,
       });
       sha = existing.sha;
-    } catch (err) {
-      // file does not exist → create new
-    }
+    } catch { /* not found → will create */ }
 
+    // f) Create or update the file in GitHub
     await octokit.repos.createOrUpdateFileContents({
       owner:   REPO_OWNER,
       repo:    REPO_NAME,
@@ -96,20 +104,22 @@ app.get('/generate', async (req, res) => {
       message: commitMsg,
       content,
       branch:  REPO_BRANCH,
-      ...(sha && { sha })
+      ...(sha && { sha }),
     });
 
-    // 5) Respond with raw URL
-    const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}/${repoFilePath}`;
+    // g) Clean up & return the raw URL
     fs.unlinkSync(localPath);
+    const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}/${repoFilePath}`;
     return res.json({ image_url: rawUrl });
   }
-  catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: e.message });
+  catch (error) {
+    console.error('❌ Error in /generate:', error);
+    return res.status(500).json({ error: error.message });
   }
 });
 
+// ── 4) START SERVER ───────────────────────────────────────────────────────────
+
 app.listen(PORT, () => {
-  console.log(`🚀 Listening on http://localhost:${PORT}/generate`);
+  console.log(`🚀 Service listening on http://localhost:${PORT}/generate`);
 });
