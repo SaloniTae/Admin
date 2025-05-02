@@ -35,10 +35,14 @@ const MEDIA_FOLDER = path.join(process.cwd(), 'media');
 fs.mkdirSync(MEDIA_FOLDER, { recursive: true });
 
 // ── Shared browser instance ───────────────────────────────────────────────────
+// ── Shared browser instance ───────────────────────────────────────────────────
 let browser;
 (async () => {
   console.log('⏳ Launching headless browser...');
-  browser = await puppeteer.launch({ args: PUPPETEER_ARGS });
+  browser = await puppeteer.launch({
+    executablePath: '/usr/bin/chromium-browser',
+    args: PUPPETEER_ARGS
+  });
   console.log('🚀 Browser launched');
 })();
 
