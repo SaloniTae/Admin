@@ -5,7 +5,7 @@ import subprocess
 from flask import Flask, request, jsonify
 from bs4 import BeautifulSoup
 from github import Github
-from PIL import Image  # removed ImageChops import since we’re using a custom trim
+from PIL import Image  # only Image is needed now
 
 app = Flask(__name__)
 
@@ -23,6 +23,9 @@ BRANCH       = os.getenv("REPO_BRANCH", "main")
 PATH_PREFIX  = os.getenv("REPO_PATH", "media/html_to_image")
 # ─────────────────────────────────────────────────────────────────────────
 
+# ── HOW MANY PIXELS TO REMOVE FROM THE BOTTOM AFTER TRIM ──────────────────
+BOTTOM_CROP_PX = 3
+
 # ensure local media folder exists
 os.makedirs(MEDIA_FOLDER, exist_ok=True)
 
@@ -30,7 +33,7 @@ os.makedirs(MEDIA_FOLDER, exist_ok=True)
 gh   = Github(GITHUB_TOKEN)
 repo = gh.get_repo(f"{REPO_OWNER}/{REPO_NAME}")
 
-# ── Helper: Crop whitespace ───────────────────────────────────────────────
+# ── Helper: Crop uniform border ────────────────────────────────────────────
 def trim_whitespace(image_path):
     """
     Crop away any uniform border of the background color (taken from top-left pixel)
@@ -41,7 +44,7 @@ def trim_whitespace(image_path):
     bg_color = img.getpixel((0, 0))
     pix = img.load()
 
-    # Build a mask of pixels that differ from the background
+    # collect all non-background pixels
     xs, ys = [], []
     for y in range(h):
         for x in range(w):
@@ -49,15 +52,12 @@ def trim_whitespace(image_path):
                 xs.append(x)
                 ys.append(y)
 
-    # If nothing differs, nothing to trim
     if not xs or not ys:
-        return
+        return  # nothing to trim
 
-    # Compute bounding box of non-background pixels
     left, right = min(xs), max(xs) + 1
     top, bottom = min(ys), max(ys) + 1
 
-    # Crop and overwrite the image
     img.crop((left, top, right, bottom)).save(image_path)
 
 # ── Endpoint ──────────────────────────────────────────────────────────────
@@ -73,8 +73,8 @@ def convert_html():
     if not html:
         return jsonify({"error": "Missing 'html'"}), 400
 
-    # 3) Determine render mode: full or element-only
-    element_id = data.get("elementId")  # optional
+    # 3) Full‐page vs element‐only render
+    element_id = data.get("elementId")
     if element_id:
         soup = BeautifulSoup(html, "html5lib")
         existing_styles = "".join(str(tag) for tag in soup.find_all("style"))
@@ -102,14 +102,14 @@ def convert_html():
     else:
         standalone = html
 
-    # 4) Write HTML to temp file
+    # 4) Write to temp HTML file
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode="w", encoding="utf-8")
     tmp.write(standalone)
     tmp.flush()
     tmp_path = tmp.name
     tmp.close()
 
-    # 5) Convert to PNG locally
+    # 5) Render and crop
     image_name = f"{uuid.uuid4().hex}.png"
     image_path = os.path.join(MEDIA_FOLDER, image_name)
     try:
@@ -118,7 +118,16 @@ def convert_html():
             check=True,
             stderr=subprocess.PIPE
         )
-        trim_whitespace(image_path)  # <-- Crop excess uniform border
+
+        # a) trim any uniform border
+        trim_whitespace(image_path)
+
+        # b) then strip exactly BOTTOM_CROP_PX from the bottom
+        if BOTTOM_CROP_PX > 0:
+            img = Image.open(image_path)
+            w, h = img.size
+            img.crop((0, 0, w, h - BOTTOM_CROP_PX)).save(image_path)
+
     except subprocess.CalledProcessError as e:
         err = e.stderr.decode(errors="ignore")
         return jsonify({"error": "Conversion failed", "details": err}), 500
@@ -138,7 +147,7 @@ def convert_html():
     except Exception:
         repo.create_file(repo_filepath, commit_msg, img_data, branch=BRANCH)
 
-    # 8) Build raw URL and clean up
+    # 8) Build raw URL & cleanup
     raw_url = (
         f"https://raw.githubusercontent.com/"
         f"{REPO_OWNER}/{REPO_NAME}/{BRANCH}/{repo_filepath}"
