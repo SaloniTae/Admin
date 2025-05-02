@@ -159,6 +159,11 @@ app.post('/generate', async (req, res) => {
   }
 });
 
+// Add this before your app.listen(...)
+app.get('/ping', (req, res) => {
+  res.sendStatus(200); // returns HTTP 200 OK
+});
+
 // ── 4) START SERVER ───────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🚀 Listening on http://localhost:${PORT}/generate`);
