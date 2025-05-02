@@ -5,7 +5,7 @@ import subprocess
 from flask import Flask, request, jsonify
 from bs4 import BeautifulSoup
 from github import Github
-from PIL import Image, ImageChops
+from PIL import Image, ImageChops  # <-- Added for cropping
 
 app = Flask(__name__)
 
@@ -15,6 +15,7 @@ MEDIA_FOLDER = os.environ.get(
     "MEDIA_FOLDER",
     os.path.join(os.getcwd(), "media/html_to_image")
 )
+
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 REPO_OWNER   = os.getenv("REPO_OWNER", "SaloniTae")
 REPO_NAME    = os.getenv("REPO_NAME", "Admin")
@@ -59,24 +60,11 @@ def convert_html():
         # extract any <style> tags you already have
         existing_styles = "".join(str(tag) for tag in soup.find_all("style"))
 
-        # build print-css to hide everything except the element
+        # build an extra style to drop page margins & shrink-wrap the container
         inject = f"""
         <style>
-          @media print {{
-            /* hide all */
-            body * {{
-              visibility: hidden !important;
-              margin: 0; padding: 0;
-            }}
-            /* show only our element */
-            #{element_id} {{
-              visibility: visible !important;
-              position: absolute;
-              top: 0; left: 0;
-              /* optional: force exact size */
-              /* width: 300px; height: 300px; */
-            }}
-          }}
+          html, body {{ margin: 0; padding: 0; }}
+          #{element_id} {{ display: inline-block; }}
         </style>
         """
 
@@ -106,19 +94,16 @@ def convert_html():
     tmp_path = tmp.name
     tmp.close()
 
-    # 5) Convert to PNG locally (with print CSS + viewport sizing)
+    # 5) Convert to PNG locally
     image_name = f"{uuid.uuid4().hex}.png"
     image_path = os.path.join(MEDIA_FOLDER, image_name)
     try:
-        subprocess.run([
-            "wkhtmltoimage",
-            "--print-media-type",      # use @media print rules
-            "--width",  "400",         # OPTIONAL: match your element’s width in px
-            "--height", "400",         # OPTIONAL: match your element’s height in px
-            tmp_path,
-            image_path
-        ], check=True, stderr=subprocess.PIPE)
-        trim_whitespace(image_path)  # crop any excess whitespace
+        subprocess.run(
+            ["wkhtmltoimage", tmp_path, image_path],
+            check=True,
+            stderr=subprocess.PIPE
+        )
+        trim_whitespace(image_path)  # <-- Crop excess white space
     except subprocess.CalledProcessError as e:
         err = e.stderr.decode(errors="ignore")
         return jsonify({"error": "Conversion failed", "details": err}), 500
