@@ -5,7 +5,7 @@ import subprocess
 from flask import Flask, request, jsonify
 from bs4 import BeautifulSoup
 from github import Github
-from PIL import Image, ImageChops  # <-- Added for cropping
+from PIL import Image  # removed ImageChops import since we’re using a custom trim
 
 app = Flask(__name__)
 
@@ -32,13 +32,33 @@ repo = gh.get_repo(f"{REPO_OWNER}/{REPO_NAME}")
 
 # ── Helper: Crop whitespace ───────────────────────────────────────────────
 def trim_whitespace(image_path):
+    """
+    Crop away any uniform border of the background color (taken from top-left pixel)
+    but leave all interior content intact.
+    """
     img = Image.open(image_path).convert("RGB")
-    bg = Image.new("RGB", img.size, img.getpixel((0, 0)))
-    diff = ImageChops.difference(img, bg)
-    bbox = diff.getbbox()
-    if bbox:
-        img_cropped = img.crop(bbox)
-        img_cropped.save(image_path)
+    w, h = img.size
+    bg_color = img.getpixel((0, 0))
+    pix = img.load()
+
+    # Build a mask of pixels that differ from the background
+    xs, ys = [], []
+    for y in range(h):
+        for x in range(w):
+            if pix[x, y] != bg_color:
+                xs.append(x)
+                ys.append(y)
+
+    # If nothing differs, nothing to trim
+    if not xs or not ys:
+        return
+
+    # Compute bounding box of non-background pixels
+    left, right = min(xs), max(xs) + 1
+    top, bottom = min(ys), max(ys) + 1
+
+    # Crop and overwrite the image
+    img.crop((left, top, right, bottom)).save(image_path)
 
 # ── Endpoint ──────────────────────────────────────────────────────────────
 @app.route("/convert", methods=["POST"])
@@ -57,17 +77,13 @@ def convert_html():
     element_id = data.get("elementId")  # optional
     if element_id:
         soup = BeautifulSoup(html, "html5lib")
-        # extract any <style> tags you already have
         existing_styles = "".join(str(tag) for tag in soup.find_all("style"))
-
-        # build an extra style to drop page margins & shrink-wrap the container
         inject = f"""
         <style>
           html, body {{ margin: 0; padding: 0; }}
           #{element_id} {{ display: inline-block; }}
         </style>
         """
-
         target = soup.find(id=element_id)
         if not target:
             return jsonify({"error": f"No element with id='{element_id}' found"}), 400
@@ -84,7 +100,6 @@ def convert_html():
 </body>
 </html>"""
     else:
-        # full-page pass-through
         standalone = html
 
     # 4) Write HTML to temp file
@@ -103,7 +118,7 @@ def convert_html():
             check=True,
             stderr=subprocess.PIPE
         )
-        trim_whitespace(image_path)  # <-- Crop excess white space
+        trim_whitespace(image_path)  # <-- Crop excess uniform border
     except subprocess.CalledProcessError as e:
         err = e.stderr.decode(errors="ignore")
         return jsonify({"error": "Conversion failed", "details": err}), 500
