@@ -8,22 +8,21 @@ from github import Github
 
 app = Flask(__name__)
 
-# ── REQUIRED ENV VARS ───────────────────────────────────────────────────────────
+# ── REQUIRED ENV VARS ──────────────────────────────────────────────────────
 API_KEY      = os.getenv("API_KEY", "abcd")
 MEDIA_FOLDER = os.environ.get(
     "MEDIA_FOLDER",
     os.path.join(os.getcwd(), "media/html_to_image")
 )
 
-# GitHub config (defaults filled in)
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 REPO_OWNER   = os.getenv("REPO_OWNER", "SaloniTae")
 REPO_NAME    = os.getenv("REPO_NAME", "Admin")
 BRANCH       = os.getenv("REPO_BRANCH", "main")
 PATH_PREFIX  = os.getenv("REPO_PATH", "media/html_to_image")
-# ────────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────
 
-# make sure your local media folder exists
+# ensure local media folder exists
 os.makedirs(MEDIA_FOLDER, exist_ok=True)
 
 # initialize GitHub client
@@ -42,18 +41,30 @@ def convert_html():
     if not html:
         return jsonify({"error": "Missing 'html'"}), 400
 
-    # 3) Extract <div id="qr-container">
-    soup = BeautifulSoup(html, "html5lib")
-    div  = soup.find("div", id="qr-container")
-    if not div:
-        return jsonify({"error": "No <div id='qr-container'>"}), 400
+    # 3) Determine render mode: full or element-only
+    element_id = data.get("elementId")  # optional
+    if element_id:
+        soup = BeautifulSoup(html, "html5lib")
+        # extract styles
+        styles = soup.find_all("style")
+        head_styles = "".join(str(tag) for tag in styles)
+        # extract target element
+        target = soup.find(id=element_id)
+        if not target:
+            return jsonify({"error": f"No element with id='{element_id}' found"}), 400
+        # build minimal HTML with styles
+        standalone = f"""<!DOCTYPE html>
+<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n{head_styles}\n</head>\n<body>\n{target.prettify()}\n</body>\n</html>"""
+    else:
+        # full HTML pass-through
+        standalone = html
 
-    # 4) Write minimal HTML to temp file
-    standalone = f"""<!DOCTYPE html>
-<html><body>{div.prettify()}</body></html>"""
+    # 4) Write HTML to temp file
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode="w", encoding="utf-8")
-    tmp.write(standalone); tmp.flush(); tmp.close()
+    tmp.write(standalone)
+    tmp.flush()
     tmp_path = tmp.name
+    tmp.close()
 
     # 5) Convert to PNG locally
     image_name = f"{uuid.uuid4().hex}.png"
@@ -65,7 +76,8 @@ def convert_html():
             stderr=subprocess.PIPE
         )
     except subprocess.CalledProcessError as e:
-        return jsonify({"error": "Conversion failed", "details": e.stderr.decode()}), 500
+        err = e.stderr.decode(errors="ignore")
+        return jsonify({"error": "Conversion failed", "details": err}), 500
     finally:
         os.remove(tmp_path)
 
@@ -77,13 +89,12 @@ def convert_html():
     repo_filepath = f"{PATH_PREFIX}/{image_name}"
     commit_msg    = f"Add generated image {image_name}"
     try:
-        # update if exists, otherwise create
         existing = repo.get_contents(repo_filepath, ref=BRANCH)
         repo.update_file(repo_filepath, commit_msg, img_data, existing.sha, branch=BRANCH)
     except Exception:
         repo.create_file(repo_filepath, commit_msg, img_data, branch=BRANCH)
 
-    # 8) Build raw URL and (optionally) clean up local file
+    # 8) Build raw URL and clean up
     raw_url = (
         f"https://raw.githubusercontent.com/"
         f"{REPO_OWNER}/{REPO_NAME}/{BRANCH}/{repo_filepath}"
