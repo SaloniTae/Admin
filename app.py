@@ -5,6 +5,7 @@ import subprocess
 from flask import Flask, request, jsonify
 from bs4 import BeautifulSoup
 from github import Github
+from PIL import Image, ImageChops  # <-- Added for cropping
 
 app = Flask(__name__)
 
@@ -29,6 +30,17 @@ os.makedirs(MEDIA_FOLDER, exist_ok=True)
 gh   = Github(GITHUB_TOKEN)
 repo = gh.get_repo(f"{REPO_OWNER}/{REPO_NAME}")
 
+# ── Helper: Crop whitespace ───────────────────────────────────────────────
+def trim_whitespace(image_path):
+    img = Image.open(image_path).convert("RGB")
+    bg = Image.new("RGB", img.size, img.getpixel((0, 0)))
+    diff = ImageChops.difference(img, bg)
+    bbox = diff.getbbox()
+    if bbox:
+        img_cropped = img.crop(bbox)
+        img_cropped.save(image_path)
+
+# ── Endpoint ──────────────────────────────────────────────────────────────
 @app.route("/convert", methods=["POST"])
 def convert_html():
     # 1) API key check
@@ -91,6 +103,7 @@ def convert_html():
             check=True,
             stderr=subprocess.PIPE
         )
+        trim_whitespace(image_path)  # <-- Crop excess white space
     except subprocess.CalledProcessError as e:
         err = e.stderr.decode(errors="ignore")
         return jsonify({"error": "Conversion failed", "details": err}), 500
