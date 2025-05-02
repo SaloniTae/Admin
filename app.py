@@ -45,18 +45,34 @@ def convert_html():
     element_id = data.get("elementId")  # optional
     if element_id:
         soup = BeautifulSoup(html, "html5lib")
-        # extract styles
-        styles = soup.find_all("style")
-        head_styles = "".join(str(tag) for tag in styles)
-        # extract target element
+        # extract any <style> tags you already have
+        existing_styles = "".join(str(tag) for tag in soup.find_all("style"))
+
+        # build an extra style to drop page margins & shrink-wrap the container
+        inject = f"""
+        <style>
+          html, body {{ margin: 0; padding: 0; }}
+          #{element_id} {{ display: inline-block; }}
+        </style>
+        """
+
         target = soup.find(id=element_id)
         if not target:
             return jsonify({"error": f"No element with id='{element_id}' found"}), 400
-        # build minimal HTML with styles
+
         standalone = f"""<!DOCTYPE html>
-<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n{head_styles}\n</head>\n<body>\n{target.prettify()}\n</body>\n</html>"""
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  {existing_styles}
+  {inject}
+</head>
+<body>
+  {target.prettify()}
+</body>
+</html>"""
     else:
-        # full HTML pass-through
+        # full-page pass-through
         standalone = html
 
     # 4) Write HTML to temp file
