@@ -73,7 +73,7 @@ app.post('/convert', async (req, res) => {
 
     // 4) Launch Puppeteer using the system Chrome Render provides
     const browser = await puppeteer.launch({
-      channel: 'chrome',
+      executablePath: process.env.CHROME_PATH || 'google-chrome-stable',
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     const page = await browser.newPage();
