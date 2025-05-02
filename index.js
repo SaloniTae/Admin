@@ -1,27 +1,29 @@
 import express from 'express';
-import { render } from 'node-html-to-image';
+// ▶️ Import the default and then pull out `render`
+import htmlToImage from 'node-html-to-image';
+const { render } = htmlToImage;
+
 import fs from 'fs';
 import path from 'path';
 import { Octokit } from '@octokit/rest';
 import { v4 as uuidv4 } from 'uuid';
 
-// ── 1) HARD-CODED CONFIG ─────────────────────────────────────────────────────
+// ── 1) CONFIG ────────────────────────────────────────────────────────────────
 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;    // ← Only this one stays in env
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;    // ← Only this one comes from env
 
 const REPO_OWNER   = 'SaloniTae';
 const REPO_NAME    = 'Admin';
 const REPO_BRANCH  = 'main';
 const REPO_PATH    = 'media/html_to_image';
 
-// Puppeteer flags for Render free plan
 const PUPPETEER_ARGS = [
   '--no-sandbox',
   '--disable-setuid-sandbox',
   '--disable-dev-shm-usage',
 ];
 
-// ── 2) BOILERPLATE ───────────────────────────────────────────────────────────
+// ── 2) PREP ──────────────────────────────────────────────────────────────────
 
 if (!GITHUB_TOKEN) {
   console.error('❌ Missing GITHUB_TOKEN in environment');
@@ -34,36 +36,36 @@ fs.mkdirSync(MEDIA_FOLDER, { recursive: true });
 const app  = express();
 const PORT = process.env.PORT || 10000;
 
-// ── 3) ROUTE ─────────────────────────────────────────────────────────────────
+// ── 3) /generate ROUTE ──────────────────────────────────────────────────────
 
 app.get('/generate', async (req, res) => {
   try {
-    // a) Define your HTML template
+    // a) Your HTML template
     const html = `
-      <html>
-        <head>
-          <style>
-            body { margin:0; padding:40px; font-family:sans-serif; }
-            .card {
-              padding:20px;
-              border-radius:8px;
-              box-shadow:0 2px 8px rgba(0,0,0,0.1);
-              background:#fff;
-            }
-            h1 { font-size:32px; margin:0 0 10px; }
-            p  { font-size:16px; color:#555; }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <h1>Hello, world!</h1>
-            <p>Rendered via node-html-to-image on Node 22.</p>
-          </div>
-        </body>
-      </html>
+    <html>
+      <head>
+        <style>
+          body { margin:0; padding:40px; font-family:sans-serif; }
+          .card {
+            padding:20px;
+            border-radius:8px;
+            box-shadow:0 2px 8px rgba(0,0,0,0.1);
+            background:#fff;
+          }
+          h1 { font-size:32px; margin:0 0 10px; }
+          p  { font-size:16px; color:#555; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>Hello, world!</h1>
+          <p>Rendered via node-html-to-image on Node 22.</p>
+        </div>
+      </body>
+    </html>
     `;
 
-    // b) Render to a local file
+    // b) Render locally
     const imageName = `${uuidv4()}.png`;
     const localPath = path.join(MEDIA_FOLDER, imageName);
 
@@ -75,16 +77,16 @@ app.get('/generate', async (req, res) => {
     });
     console.log(`✅ Rendered image to ${localPath}`);
 
-    // c) Read & Base64-encode the file
+    // c) Read & encode
     const buffer  = fs.readFileSync(localPath);
     const content = buffer.toString('base64');
 
-    // d) Initialize GitHub client
+    // d) GitHub client
     const octokit = new Octokit({ auth: GITHUB_TOKEN });
     const repoFilePath = `${REPO_PATH}/${imageName}`;
     const commitMsg    = `Add generated image ${imageName}`;
 
-    // e) Try to fetch existing file SHA (for update vs. create)
+    // e) Check if exists (for update vs create)
     let sha;
     try {
       const { data: existing } = await octokit.repos.getContent({
@@ -94,9 +96,11 @@ app.get('/generate', async (req, res) => {
         ref:   REPO_BRANCH,
       });
       sha = existing.sha;
-    } catch { /* not found → will create */ }
+    } catch {
+      // not found ⇒ we'll create it
+    }
 
-    // f) Create or update the file in GitHub
+    // f) Create/update on GitHub
     await octokit.repos.createOrUpdateFileContents({
       owner:   REPO_OWNER,
       repo:    REPO_NAME,
@@ -107,7 +111,7 @@ app.get('/generate', async (req, res) => {
       ...(sha && { sha }),
     });
 
-    // g) Clean up & return the raw URL
+    // g) Cleanup & respond
     fs.unlinkSync(localPath);
     const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}/${repoFilePath}`;
     return res.json({ image_url: rawUrl });
@@ -118,7 +122,7 @@ app.get('/generate', async (req, res) => {
   }
 });
 
-// ── 4) START SERVER ───────────────────────────────────────────────────────────
+// ── 4) START ─────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
   console.log(`🚀 Service listening on http://localhost:${PORT}/generate`);
