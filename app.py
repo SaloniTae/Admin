@@ -24,7 +24,7 @@ PATH_PREFIX  = os.getenv("REPO_PATH", "media/html_to_image")
 # ─────────────────────────────────────────────────────────────────────────
 
 # ── HOW MANY PIXELS TO REMOVE FROM THE BOTTOM AFTER TRIM ──────────────────
-BOTTOM_CROP_PX = 3
+BOTTOM_CROP_PX = 4
 
 # ensure local media folder exists
 os.makedirs(MEDIA_FOLDER, exist_ok=True)
