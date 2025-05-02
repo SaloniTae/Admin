@@ -1,0 +1,14 @@
+# Exported from Render on 2025-05-02T15:26:46Z
+services:
+- type: web
+  name: PuppeteerTest
+  runtime: node
+  repo: https://github.com/SaloniTae/Admin
+  plan: free
+  envVars:
+  - key: GITHUB_TOKEN
+    sync: false
+  region: oregon
+  buildCommand: npm install
+  startCommand: node index.js
+version: "1"
