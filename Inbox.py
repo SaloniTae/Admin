@@ -82,7 +82,7 @@ def get_latest_email():
 # Replace the following with your actual Telegram API credentials and bot token.
  api_id = 25270711
  api_hash = "6bf18f3d9519a2de12ac1e2e0f5c383e"
- bot_token = "7140092976:AAFtmOBKi-mIoVighcf4XXassHimU2CtlR8"
+ bot_token = "7140092976:AAFtmOBKi-mIoVighcf4XXassHimU2CtlyR8"
 
 
 # Create a Pyrogram Client instance using the bot token
