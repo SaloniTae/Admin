@@ -44,7 +44,7 @@ from decimal import Decimal, InvalidOperation
 # --------------------- Bot Configuration ---------------------
 API_ID = "25270711"
 API_HASH = "6bf18f3d9519a2de12ac1e2e0f5c383e"
-BOT_TOKEN = "7140092976:AAFtmOBKi-mIoVighcf4XXassHimU2CtlR8"
+BOT_TOKEN = "7140092976:AAHsqcw-hfs-Kb0aAgMof631fJ7DL1-NY_w"
 
 # (My Test Bot)
 #API_ID = "25270711"
