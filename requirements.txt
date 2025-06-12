@@ -1,5 +1,6 @@
-PyGithub
-Flask
-beautifulsoup4
-html5lib
+pyrogram
+aiohttp
+requests
 Pillow
+qrcode-styled
+pytz
