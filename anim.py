@@ -9,7 +9,7 @@ BOT_TOKEN = "7140092976:AAHsqcw-hfs-Kb0aAgMof631fJ7DL1-NY_w"
 app = Client("oor_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # Your image path (Termux users: ensure this path exists!)
-IMAGE_PATH = "/storage/emulated/0/Pictures/Telegram/IMG_20250616_130429_596.jpg"
+IMAGE_PATH = "https://raw.githubusercontent.com/SaloniTae/Admin/refs/heads/main/IMG_20250616_130429_596.jpg"
 
 # Caption texts
 CAPTIONS = [
