@@ -1,6 +1,3 @@
-pyrogram
-aiohttp
 requests
-Pillow
-qrcode-styled
-pytz
+gunicorn
+flask
