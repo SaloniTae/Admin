@@ -266,7 +266,8 @@ def home():
 
 # ─── THREAD STARTUP ONCE PER WORKER ───────────────────────────────────────────
 started = False
-@app.before_first_request
+
+@app.before_request
 def start_monitors():
     global started
     if started:
@@ -274,9 +275,9 @@ def start_monitors():
     started = True
 
     DBS = {
-       "crunchyroll": "https://get-crunchy-credentials-default-rtdb.firebaseio.com",
-       "prime":       "https://get-prime-credentials-default-rtdb.firebaseio.com",
-       "netflix":     "https://get-accounts-netflix-prime-default-rtdb.firebaseio.com",
+        "crunchyroll": "https://get-crunchy-credentials-default-rtdb.firebaseio.com",
+        "prime":       "https://get-prime-credentials-default-rtdb.firebaseio.com",
+        "netflix":     "https://get-accounts-netflix-prime-default-rtdb.firebaseio.com",
     }
     for svc, url in DBS.items():
         loop = make_monitor(url, svc, poll_interval=1.0)
