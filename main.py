@@ -18,7 +18,7 @@ ONESIGNAL_APP_ID  = "887203af-f02f-4a68-ad94-0214cdec4d4f"
 ONESIGNAL_API_KEY = "os_v2_app_rbzahl7qf5fgrlmuaikm33cnj6722nlzdy2u5v4wnwxc7hl5xmt7erlubtaxg3lcqrojgpcgu4md5so7p5oxeihqpsmej7bi56lprci"
 ONESIGNAL_URL     = "https://onesignal.com/api/v1/notifications"
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
