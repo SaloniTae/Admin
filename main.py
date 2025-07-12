@@ -274,9 +274,9 @@ def start_monitors():
     started = True
 
     DBS = {
-    "crunchyroll": "https://get-crunchy-credentials-default-rtdb.firebaseio.com",
-    "prime":       "https://get-prime-credentials-default-rtdb.firebaseio.com",
-    "netflix":     "https://get-accounts-netflix-prime-default-rtdb.firebaseio.com",
+       "crunchyroll": "https://get-crunchy-credentials-default-rtdb.firebaseio.com",
+       "prime":       "https://get-prime-credentials-default-rtdb.firebaseio.com",
+       "netflix":     "https://get-accounts-netflix-prime-default-rtdb.firebaseio.com",
     }
     for svc, url in DBS.items():
         loop = make_monitor(url, svc, poll_interval=1.0)
