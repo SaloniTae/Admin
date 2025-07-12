@@ -264,17 +264,25 @@ app = Flask(__name__)
 def home():
     return jsonify({"status": "OK"})
 
-# ─── START MONITORS AT IMPORT TIME ─────────────────────────────────────────────
-DBS = {
+# ─── THREAD STARTUP ONCE PER WORKER ───────────────────────────────────────────
+started = False
+@app.before_first_request
+def start_monitors():
+    global started
+    if started:
+        return
+    started = True
+
+    DBS = {
     "crunchyroll": "https://get-crunchy-credentials-default-rtdb.firebaseio.com",
     "prime":       "https://get-prime-credentials-default-rtdb.firebaseio.com",
     "netflix":     "https://get-accounts-netflix-prime-default-rtdb.firebaseio.com",
-}
-
-for svc, url in DBS.items():
-    loop = make_monitor(url, svc, poll_interval=1.0)
-    t = threading.Thread(target=loop, daemon=True)
-    t.start()
+    }
+    for svc, url in DBS.items():
+        loop = make_monitor(url, svc, poll_interval=1.0)
+        t = threading.Thread(target=loop, daemon=True)
+        t.start()
+        logger.info("Worker %s started monitor thread for %s", os.getpid(), svc)
 
 # ─── RUN (only with `python main.py`) ───────────────────────────────────────────
 if __name__ == "__main__":
