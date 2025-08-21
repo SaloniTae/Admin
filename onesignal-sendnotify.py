@@ -24,6 +24,74 @@ except Exception:
     _HAS_AIOHTTP = False
     import requests  # type: ignore
 
+
+
+
+# --- tiny health server for Render (paste near top of file) ---
+from aiohttp import web
+
+HEALTH_SERVER_ENABLED = os.getenv("HEALTH_SERVER_ENABLED", "true").lower() in ("1", "true", "yes")
+# Render provides PORT env var during deploy; fallback to 8080
+HEALTH_BIND_HOST = os.getenv("HEALTH_BIND_HOST", "0.0.0.0")
+HEALTH_BIND_PORT = int(os.getenv("PORT", os.getenv("HEALTH_BIND_PORT", "8080")))
+
+# simple handler that reports script status if you have _status_lock/_IS_ONLINE
+async def _health_handler(request):
+    # include minimal info; safe to return even if status vars are missing
+    status = {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+    try:
+        # if your script defines these, include them
+        async with _status_lock:
+            is_online = _IS_ONLINE
+        status["my_online"] = bool(is_online is True)
+        status["my_status_known"] = (is_online is not None)
+    except Exception:
+        pass
+    return web.json_response(status)
+
+def start_health_server():
+    """Create and return an asyncio.Task running the aiohttp health server."""
+    if not HEALTH_SERVER_ENABLED:
+        return None
+
+    app = web.Application()
+    app.router.add_get("/health", _health_handler)
+
+    runner = web.AppRunner(app)
+
+    async def _run():
+        try:
+            await runner.setup()
+            site = web.TCPSite(runner, HEALTH_BIND_HOST, HEALTH_BIND_PORT)
+            await site.start()
+            if DEBUG:
+                print(f"[health] started on http://{HEALTH_BIND_HOST}:{HEALTH_BIND_PORT}/health")
+            while running:
+                await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            # teardown on cancel
+            try:
+                await runner.cleanup()
+            except Exception:
+                pass
+            return
+        except Exception:
+            if DEBUG:
+                import traceback as _tb
+                _tb.print_exc()
+            try:
+                await runner.cleanup()
+            except Exception:
+                pass
+
+    return asyncio.create_task(_run())
+# --- end health server block ---
+
+
+
+
+
+
 # -------- CONFIG (via env vars / defaults) --------
 API_ID = int(os.getenv("TG_API_ID", "12344306"))               # REQUIRED
 API_HASH = os.getenv("TG_API_HASH", "618183cd0189d15777dbb390a3d121e0")                 # REQUIRED
@@ -962,6 +1030,12 @@ async def stop_workers(tasks):
 # ----------------- main -----------------
 async def main():
     global MY_ID, _IS_ONLINE
+        # start health server immediately so Render sees an open port during deploy
+    health_task = None
+    try:
+        health_task = start_health_server()
+    except Exception:
+        health_task = None
 
     print("Starting Telethon client...")
     await client.start()
@@ -1013,6 +1087,17 @@ async def main():
         rescanner.cancel()
         notifier.cancel()
         await stop_workers(worker_tasks)
+
+    try:
+        await client.run_until_disconnected()
+    finally:
+        # cancel health server cleanly
+        if health_task:
+            health_task.cancel()
+            try:
+                await health_task
+            except Exception:
+                pass
 
 def _handle_exit(signame):
     print(f"Received {signame}, shutting down...")
