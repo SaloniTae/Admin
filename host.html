@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Host — Start Share</title>
+  <script src="https://8x8.vc/vpaas-magic-cookie-45b14c029c1e43698634a0ad0d0838a9/external_api.js"></script>
+  <style>html,body,#jaas{height:100%;margin:0}</style>
+</head>
+<body>
+  <div id="jaas"></div>
+
+<script>
+(async ()=>{
+  const ROOM = "vpaas-magic-cookie-45b14c029c1e43698634a0ad0d0838a9/AyushLive"; // change room suffix if you want
+  // NOTE: keep your host JWT here (or load from server). You provided one earlier; replace the string below if needed.
+  const HOST_JWT = "eyJraWQiOiJ2cGFhcy1tYWdpYy1jb29raWUtNDViMTRjMDI5YzFlNDM2OTg2MzRhMGFkMGQwODM4YTkvNjM4ODg2LVNBTVBMRV9BUFAiLCJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJqaXRzaSIsImlzcyI6ImNoYXQiLCJpYXQiOjE3NTkwODE5OTYsImV4cCI6MTc1OTA4OTE5NiwibmJmIjoxNzU5MDgxOTkxLCJzdWIiOiJ2cGFhcy1tYWdpYy1jb29raWUtNDViMTRjMDI5YzFlNDM2OTg2MzRhMGFkMGQwODM4YTkiLCJjb250ZXh0Ijp7ImZlYXR1cmVzIjp7ImxpdmVzdHJlYW1pbmciOnRydWUsImZpbGUtdXBsb2FkIjp0cnVlLCJvdXRib3VuZC1jYWxsIjp0cnVlLCJzaXAtb3V0Ym91bmQtY2FsbCI6ZmFsc2UsInRyYW5zY3JpcHRpb24iOnRydWUsImxpc3QtdmlzaXRvcnMiOmZhbHNlLCJyZWNvcmRpbmciOnRydWUsImZsaXAiOmZhbHNlfSwidXNlciI6eyJoaWRkZW4tZnJvbS1yZWNvcmRlciI6ZmFsc2UsIm1vZGVyYXRvciI6dHJ1ZSwibmFtZSI6ImhleXlpdHNtZXdhc2ltIiwiaWQiOiJnb29nbGUtb2F1dGgyfDEwMzk5Mzc3MDU4OTQ2MjU2NDg5NyIsImF2YXRhciI6IiIsImVtYWlsIjoiaGV5eWl0c21ld2FzaW1AZ21haWwuY29tIn19LCJyb29tIjoiKiJ9.h3p1ue5-hjVVw0VC_jyltJykWwgcSUzCOa2JJrSrS-aA0ajSIE1rm5oz9Bil9A5kMEURxZaOAITOm6dH6mncbKMiOrlE3gseieCV6IlAVv8bTAATow9YLAXHIkNQR71APLixVBI_9dLRPh4aImI_YL90yekVm3WD8N4Iel0aawvfx8gZi1ZXIlpKEsWJlWTWo5wwkQBUU1h97_rcaVDEo24GhSHP8g2Iwhu65UyHclf3misI6bM8JgOxpBNgVcFwBhhDq3dLUi_lxfTL2LgaThc492XIaWUD8oUWwwOCnRUZuucFABtqCsXzIalgHsoFIoDrHKWODPpHXmRCB8wFZg";
+
+  const api = new JitsiMeetExternalAPI("8x8.vc", {
+    roomName: ROOM,
+    parentNode: document.getElementById('jaas'),
+    jwt: HOST_JWT,
+    // set userInfo so prejoin "enter name" is bypassed when prejoinPageEnabled=false
+    userInfo: { displayName: 'AyushMod' },
+    configOverwrite: { prejoinPageEnabled: false, disableDeepLinking: true },
+    interfaceConfigOverwrite: { TOOLBAR_BUTTONS: undefined, FILM_STRIP_ENABLED: false }
+  });
+
+  api.addEventListener('videoConferenceJoined', () => {
+    console.log('Host joined. Use the toolbar to share screen (you must accept the browser share dialog).');
+  });
+
+  window.__hostApi = api;
+})();
+</script>
+</body>
+</html>
