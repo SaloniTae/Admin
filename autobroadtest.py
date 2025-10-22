@@ -23,7 +23,7 @@ OPENROUTER_API_KEY = "sk-or-v1-1bad21d70479b2366999467d25e39a8a476af115f9e1079fe
 # --- Upstash Redis Configuration ---
 # Get your URL from the Upstash console.
 # It should look like: "redis://default:YOUR_TOKEN@YOUR_HOSTNAME:PORT"
-UPSTASH_REDIS_URL = "https://internal-swine-7780.upstash.io"
+UPSTASH_REDIS_URL = "redis://default:AR5kAAImcDIyZDYyMTdkNjk2OTc0OTU2YjA3YjJlZTliNTFjNGVlYXAyNzc4MA@internal-swine-7780.upstash.io:6379"
 
 # --- Platform & Region Configuration ---
 # These are the TMDB provider IDs for each platform. We will get a pick from each.
