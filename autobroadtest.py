@@ -1,192 +1,721 @@
-# suggester_trio.py
-
+# file: broadcaster_with_web.py
 import os
+import asyncio
 import random
-import json
-import requests
-import redis
-from openai import OpenAI
-from datetime import timedelta
+import string
+import time
+import datetime
+import logging
+import aiofiles
+import aiohttp
+import re
+from aiohttp import web
+from pyrogram import idle
 
-# ==============================================================================
-# --- ⚠️ CONFIGURATION - FILL IN YOUR SECRET KEYS AND SETTINGS HERE ⚠️ ---
-# ==============================================================================
+from pyrogram import Client, filters, types
+from pyrogram.errors import FloodWait, InputUserDeactivated, UserIsBlocked, PeerIdInvalid
 
-# --- TMDB Configuration ---
-# Get your key from https://www.themoviedb.org/settings/api
-TMDB_API_KEY = "a8e91f05284b200aa4b62fa99476083b"
+# ---------------- USER CONFIG ----------------
+BOTS = [
+    {
+        "api_id": 25270711,
+        "api_hash": "6bf18f3d9519a2de12ac1e2e0f5c383e",
+        "bot_token": "7140092976:AAHsqcw-hfs-Kb0aAgMof631fJ7DL1-NY_w",
+        "db_url": "https://shivam-testingdb-default-rtdb.firebaseio.com/",
+        "name": "Test Bot"
+    },
+]
 
-# --- OpenRouter Configuration ---
-# Get your key from https://openrouter.ai/keys
-OPENROUTER_API_KEY = "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"
 
-# --- Upstash Redis Configuration ---
-# Get your URL from the Upstash console.
-# It should look like: "redis://default:YOUR_TOKEN@YOUR_HOSTNAME:PORT"
-UPSTASH_REDIS_URL = "redis://default:AR5kAAImcDIyZDYyMTdkNjk2OTc0OTU2YjA3YjJlZTliNTFjNGVlYXAyNzc4MA@internal-swine-7780.upstash.io:6379"
+ADMIN_ID = [8104243004, 2031595742, 1785564615, 5300690945, 7067405716]
+BROADCAST_AS_COPY = True
+BATCH_SIZE = 1000
+# ----------------------------------------------
 
-# --- Platform & Region Configuration ---
-# These are the TMDB provider IDs for each platform. We will get a pick from each.
-PLATFORM_PROVIDERS = {
-    "Netflix": 8,
-    "Prime Video": 119, # Amazon Prime Video ID for IN region
-    "Crunchyroll": 283
-}
-WATCH_REGION = "IN"
-LANGUAGE = "en-US"
+# existing in-memory states from your original code (kept)
+pending_broadcast = {}
+cancel_broadcast_flag = {}   # your original key: (bot_key, admin_id) -> bool
 
-# ==============================================================================
-# --- APPLICATION CODE (No need to edit below this line) ---
-# ==============================================================================
+# new structures for web control + mapping
+CLIENTS = {}                 # map bot_token_suffix -> pyrogram Client
+progress_queues = {}         # broadcast_id -> asyncio.Queue
+cancel_broadcast_by_id = {}  # broadcast_id -> bool
+broadcast_task_map = {}      # broadcast_id -> asyncio.Task
+broadcast_id_to_key = {}     # broadcast_id -> (bot_key, admin_id) - for telegram cancel cross-check
 
-# --- 1. Initialize Clients ---
-if "YOUR_" in TMDB_API_KEY or "YOUR_" in OPENROUTER_API_KEY or "YOUR_" in UPSTASH_REDIS_URL:
-    print("❌ Error: Please fill in your API keys and Redis URL in the configuration section.")
-    exit()
+# ---------------- DB helpers (unchanged) ----------------
+def make_db_helpers(db_url: str, session: aiohttp.ClientSession):
+    async def read_node(path: str) -> dict:
+        url = db_url.rstrip("/") + f"/{path}.json"
+        try:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    return await resp.json() or {}
+                return {}
+        except:
+            return {}
+    async def patch_node(path: str, payload: dict) -> None:
+        url = db_url.rstrip("/") + f"/{path}.json"
+        try:
+            async with session.patch(url, json=payload):
+                pass
+        except:
+            pass
+    async def get_shallow_keys() -> list:
+        url = db_url.rstrip("/") + "/.json?shallow=true"
+        try:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    data = await resp.json() or {}
+                    return list(data.keys())
+                return []
+        except:
+            return []
+    async def read_users_node() -> dict:
+        return await read_node("users")
+    return read_node, patch_node, get_shallow_keys, read_users_node
 
-try:
-    redis_client = redis.from_url(UPSTASH_REDIS_URL, decode_responses=True)
-    redis_client.ping()
-    print("✅ Connected to Upstash Redis.")
-except redis.exceptions.ConnectionError as e:
-    print(f"❌ Could not connect to Upstash Redis: {e}")
-    exit()
+# ----------------- BROADCAST RUNNER (callable) -----------------
+async def run_broadcast(client: Client, broadcast_id: str, broadcast_info: dict, recipients: list, admin_id: int, progress_message=None):
+    """
+    Runs the broadcast. broadcast_info may be:
+      - the same dict you stored in pending_broadcast (where content_msg is a pyrogram Message)
+      - OR a dict coming from web with keys: content_msg {text, caption, media_file_id, media_type}, and button fields
+    progress_message: if provided, will be edited for live updates (keeps original UX).
+    """
+    # Map the broadcast_id back to the key so telegram / cancel command can work
+    bot_key = client.bot_token
+    key = (bot_key, admin_id)
+    broadcast_id_to_key[broadcast_id] = key
 
-openrouter_client = OpenAI(
-  base_url="https://openrouter.ai/api/v1",
-  api_key=OPENROUTER_API_KEY,
-)
+    # create queue for websocket listeners
+    q = asyncio.Queue()
+    progress_queues[broadcast_id] = q
+    cancel_broadcast_by_id[broadcast_id] = False
 
-# --- 2. TMDB API Functions ---
+    start_time = time.time()
+    total_users = len(recipients)
+    done = 0
+    success = 0
+    failed = 0
 
-def get_popular_content_from_tmdb(provider_id: int, media_type: str) -> list | None:
-    """Fetches popular and well-rated content from a specific provider in India."""
-    print(f"🌐 Fetching TMDB data for {media_type.upper()}s on provider ID {provider_id}...")
-    tmdb_api_url = f"https://api.themoviedb.org/3/discover/{media_type}"
-    params = {
-        'api_key': TMDB_API_KEY,
-        'sort_by': 'popularity.desc',
-        'vote_average.gte': 7.0,
-        'vote_count.gte': 200, # Lowered slightly for broader results
-        'watch_region': WATCH_REGION,
-        'with_watch_providers': provider_id,
-        'language': LANGUAGE,
-        'page': 1
-    }
-    try:
-        response = requests.get(tmdb_api_url, params=params)
-        response.raise_for_status()
-        return response.json().get('results', []) or None
-    except requests.exceptions.RequestException as e:
-        print(f"❌ TMDB API Error: {e}")
+    # fallback: if no progress_message passed, send a new one
+    if progress_message is None:
+        try:
+            progress_message = await client.send_message(admin_id, "Broadcast started...")
+        except:
+            progress_message = None
+
+    # prepare keyboard builder helper
+    def build_keyboard(info):
+        if info.get("button_option"):
+            if info.get("extra_button_option"):
+                return types.InlineKeyboardMarkup([
+                    [types.InlineKeyboardButton(info["button_text"], url=info["button_url"])],
+                    [types.InlineKeyboardButton(info["extra_button_text"], url=info["extra_button_url"])]
+                ])
+            else:
+                return types.InlineKeyboardMarkup([
+                    [types.InlineKeyboardButton(info["button_text"], url=info["button_url"])]
+                ])
         return None
 
-# --- 3. Caching Functions (Redis) ---
+    custom_keyboard = build_keyboard(broadcast_info)
 
-def get_content_from_cache_or_api(provider_name: str, provider_id: int, media_type: str) -> list | None:
-    """Tries to get data from Redis cache. If not found, fetches from TMDB and caches it."""
-    cache_key = f"content:{WATCH_REGION}:{provider_name}:{media_type}"
-    cached_data_json = redis_client.get(cache_key)
+    async with aiofiles.open("broadcast.txt", "a") as log_file:
+        try:
+            # Iterate in batches - same logic as your original loop
+            for batch_start in range(0, total_users, BATCH_SIZE):
+                # Check cancel flags (from Telegram cancel command or from web cancel endpoint)
+                if cancel_broadcast_flag.get(key) or cancel_broadcast_by_id.get(broadcast_id):
+                    break
+
+                batch = recipients[batch_start: batch_start + BATCH_SIZE]
+                for user in batch:
+                    if cancel_broadcast_flag.get(key) or cancel_broadcast_by_id.get(broadcast_id):
+                        break
+
+                    try:
+                        # Support both pyrogram Message stored in broadcast_info["content_msg"]
+                        # or a simplified dict coming from web control.
+                        content = broadcast_info.get("content_msg")
+                        # If it's a pyrogram Message object (composed in telegram), handle same as before:
+                        if hasattr(content, "media") or hasattr(content, "text") or hasattr(content, "caption"):
+                            # this is the original flow - use message attributes
+                            if getattr(content, "media", False):
+                                if hasattr(content, "photo") and content.photo:
+                                    await client.send_photo(
+                                        chat_id=user,
+                                        photo=content.photo.file_id,
+                                        caption=content.caption or "",
+                                        reply_markup=custom_keyboard
+                                    )
+                                elif hasattr(content, "video") and content.video:
+                                    await client.send_video(
+                                        chat_id=user,
+                                        video=content.video.file_id,
+                                        caption=content.caption or "",
+                                        reply_markup=custom_keyboard
+                                    )
+                                else:
+                                    await client.send_message(
+                                        chat_id=user,
+                                        text=content.caption or "",
+                                        reply_markup=custom_keyboard
+                                    )
+                            else:
+                                await client.send_message(
+                                    chat_id=user,
+                                    text=content.text or "",
+                                    reply_markup=custom_keyboard
+                                )
+                        else:
+                            # possibility: content is a dict sent via web endpoint
+                            # expected keys:
+                            # content_msg: { "text": "...", "caption": "...", "media_file_id": "...", "media_type": "photo"/"video" }
+                            if isinstance(content, dict):
+                                if content.get("media_file_id"):
+                                    mtype = content.get("media_type", "photo")
+                                    if mtype == "photo":
+                                        await client.send_photo(chat_id=user, photo=content["media_file_id"], caption=content.get("caption", ""), reply_markup=custom_keyboard)
+                                    elif mtype == "video":
+                                        await client.send_video(chat_id=user, video=content["media_file_id"], caption=content.get("caption", ""), reply_markup=custom_keyboard)
+                                    else:
+                                        await client.send_message(chat_id=user, text=content.get("caption","") or content.get("text",""), reply_markup=custom_keyboard)
+                                else:
+                                    await client.send_message(chat_id=user, text=content.get("text","") or content.get("caption",""), reply_markup=custom_keyboard)
+                            else:
+                                # unknown content shape - fallback
+                                await client.send_message(chat_id=user, text=str(content), reply_markup=custom_keyboard)
+
+                        success += 1
+                    except Exception as e:
+                        # log error (append)
+                        await log_file.write(f"{user} : {str(e)}\n")
+                        failed += 1
+                    done += 1
+
+                    # publish progress every few messages (your original used 10)
+                    if done % 10 == 0 or done == total_users:
+                        elapsed = time.time() - start_time
+                        avg_time = elapsed / done if done else 0
+                        remaining = int((total_users - done) * avg_time) if total_users - done > 0 else 0
+                        percent = (done / total_users) * 100 if total_users else 0.0
+                        text = (
+                            f"𝗕𝗿𝗼𝗮𝗱𝗰𝗮𝘀𝘁 𝗣𝗿𝗼𝗴𝗿𝗲𝘀𝘀 ⚡ (ID: {broadcast_id}):\n\n"
+                            f"🚀 𝙎𝙚𝙣𝙩: {done}/{total_users} ({percent:.1f}%)\n\n"
+                            f"✅ 𝖲𝗎𝖼𝖼𝖾𝗌𝗌: {success} | ❎ 𝖥𝖺𝗂𝗅𝖾𝖽: {failed}\n\n"
+                            f"⏱️ 𝖤𝗅𝖺𝗉𝗌𝖾𝖽:  {datetime.timedelta(seconds=int(elapsed))}\n"
+                            f"⏱️ 𝖱𝖾𝗆𝖺𝗂𝗇𝗂𝗇𝗀: {datetime.timedelta(seconds=int(remaining))}"
+                        )
+                        # push to progress queue for websocket clients
+                        await q.put({
+                            "broadcast_id": broadcast_id,
+                            "done": done, "total": total_users,
+                            "success": success, "failed": failed,
+                            "percent": round(percent, 1),
+                            "elapsed_seconds": int(elapsed),
+                            "remaining_seconds": remaining,
+                        })
+                        # edit admin progress message if possible (best-effort)
+                        if progress_message:
+                            try:
+                                await progress_message.edit_text(text)
+                            except:
+                                # ignore edit failures (message edited elsewhere)
+                                await asyncio.sleep(0.2)
+
+                # small batch delay like your original
+                await asyncio.sleep(3)
+
+        finally:
+            # final publish & cleanup
+            total_time = datetime.timedelta(seconds=int(time.time() - start_time))
+            status = "cancelled" if (cancel_broadcast_flag.get(key) or cancel_broadcast_by_id.get(broadcast_id)) else "completed"
+            final_summary = {
+                "broadcast_id": broadcast_id,
+                "done": done, "total": total_users,
+                "success": success, "failed": failed,
+                "status": status,
+                "total_time": str(total_time),
+            }
+            # push final then sentinel
+            await q.put(final_summary)
+            await q.put(None)
+
+            # cleanup maps after short delay
+            await asyncio.sleep(0.05)
+            cancel_broadcast_by_id.pop(broadcast_id, None)
+            progress_queues.pop(broadcast_id, None)
+            broadcast_task_map.pop(broadcast_id, None)
+            broadcast_id_to_key.pop(broadcast_id, None)
+
+            # send summary to admin (as original)
+            try:
+                summary_text = (
+                    f"Broadcast {'CANCELLED' if final_summary['status']=='cancelled' else 'COMPLETED'} (ID: {broadcast_id})\n\n"
+                    f"👥 𝗧𝗼𝘁𝗮𝗹: {total_users}\n"
+                    f"🚀 𝗦𝗲𝗻𝘁: {done}/{total_users}\n\n"
+                    f"✅ 𝖲𝗎𝖼𝖼𝖾𝗌𝗌: {success} | ❎ 𝖥𝖺𝗂𝗅𝖾𝖽: {failed}\n\n"
+                    f"⏱️ 𝖥𝗂𝗇𝗂𝖲𝗁𝖾𝗗 𝗂𝗇: {total_time}"
+                )
+                await client.send_message(admin_id, summary_text)
+            except:
+                pass
+
+# ----------------- REGISTER BROADCAST HANDLERS (original) -----------------
+def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, read_users_node):
+    bot_key = app.bot_token
     
-    if cached_data_json:
-        print(f"✅ Cache hit for '{provider_name}' in region '{WATCH_REGION}'.")
-        return json.loads(cached_data_json)
-    else:
-        print(f"🔍 Cache miss for '{provider_name}'.")
-        data = get_popular_content_from_tmdb(provider_id, media_type)
-        if data:
-            redis_client.setex(cache_key, timedelta(hours=12), json.dumps(data))
-            print(f"💾 Saved new data to Redis cache (expires in 12 hours).")
-        return data
+    # Step 1: /broadcast command
+    @app.on_message(filters.command("broadcast") & filters.user(ADMIN_ID))
+    async def broadcast_command(client, message):
+        admin_id = message.from_user.id
+        pending_broadcast[(bot_key, admin_id)] = {}
+        cancel_broadcast_flag[(bot_key, admin_id)] = False
+        await message.reply_text(
+            "Please send me the content (text or media) that you want to broadcast."
+        )
 
-# --- 4. AI Curation Function (Gemini Flash) ---
+    # Group 1: Capture the content
+    @app.on_message(
+        filters.user(ADMIN_ID)
+        & ~filters.command(["broadcast", "cancelbroadcast"]),
+        group=1
+    )
+    async def capture_broadcast_content(client, message):
+        admin_id = message.from_user.id
+        if (bot_key, admin_id) not in pending_broadcast:
+            return
 
-def get_gemini_single_suggestion(content_list: list, platform_name: str, media_type: str) -> str:
-    """Sends a list to Gemini Flash and asks for the single best suggestion."""
-    print(f"🤖 Asking Gemini Flash for the #1 pick from {platform_name}...")
-    
-    sample_size = min(len(content_list), 25)
-    random_sample = random.sample(content_list, sample_size)
-    
-    formatted_list = []
-    for item in random_sample:
-        title = item.get('title') or item.get('name')
-        year = (item.get('release_date') or item.get('first_air_date', ''))[:4]
-        rating = item.get('vote_average')
-        formatted_list.append(f"- {title} ({year}) - Rating: {rating:.1f}/10")
-    
-    content_str = "\n".join(formatted_list)
+        info = pending_broadcast[(bot_key, admin_id)]
+        if "content_msg" not in info:
+            info["content_msg"] = message
+            await message.reply_text(
+                "Do you want to include an inline button? Reply with 'yes' or 'no'."
+            )
 
-    prompt = f"""
-    You are a fun and sharp movie critic. I have a list of popular and well-rated {media_type} available on {platform_name} in India.
+    # Group 2: Yes/No for inline button
+    @app.on_message(
+        filters.user(ADMIN_ID)
+        & filters.regex("^(yes|no)$", flags=re.IGNORECASE)
+        & ~filters.command(["broadcast", "cancelbroadcast"]),
+        group=2
+    )
+    async def capture_inline_button_option(client, message):
+        admin_id = message.from_user.id
+        if (bot_key, admin_id) not in pending_broadcast:
+            return
+                
+        option = message.text.strip().lower()
+        broadcast_info = pending_broadcast[(bot_key, admin_id)]
+        if "content_msg" in broadcast_info and "button_option" not in broadcast_info:
+            if option == "yes":
+                broadcast_info["button_option"] = True
+                await message.reply_text(
+                    "Please send me the inline button text you want to include in the broadcast."
+                )
+            elif option == "no":
+                broadcast_info["button_option"] = False
+                confirm_kb = types.InlineKeyboardMarkup([
+                    [
+                        types.InlineKeyboardButton("Confirm", callback_data="confirm_broadcast"),
+                        types.InlineKeyboardButton("Cancel",  callback_data="cancel_broadcast"),
+                    ]
+                ])
+                await message.reply_text(
+                    "Do you want to broadcast the content without an inline button?",
+                    reply_markup=confirm_kb
+                )
+            else:
+                await message.reply_text("Invalid response. Please reply with 'yes' or 'no'.")
 
-    From this list, pick the *single best one* to recommend right now.
+    # Group 3: Capture the inline button text
+    @app.on_message(
+        filters.user(ADMIN_ID)
+        & ~filters.regex("^(yes|no)$", flags=re.IGNORECASE)
+        & ~filters.command(["broadcast", "cancelbroadcast"]),
+        group=3
+    )
+    async def capture_button_text(client, message):
+        admin_id = message.from_user.id
+        if (bot_key, admin_id) not in pending_broadcast:
+            return
+        broadcast_info = pending_broadcast[(bot_key, admin_id)]
+        if broadcast_info.get("button_option") and "button_text" not in broadcast_info:
+            if message.text:
+                broadcast_info["button_text"] = message.text.strip()
+                await message.reply_text(
+                    "Please send me the inline button URL for the button."
+                )
+            else:
+                await message.reply_text("Please send a valid button text.")
 
-    Your entire response MUST be in this exact format, and nothing else:
-    **[Title] ([Year])**: [A short, punchy, and exciting one-sentence reason why it's a must-watch.]
+    # Group 4: Capture the primary inline button URL.
+    @app.on_message(
+        filters.user(ADMIN_ID)
+        & ~filters.command(["broadcast", "cancelbroadcast"]),
+        group=4
+    )
+    async def capture_button_url(client, message):
+        admin_id = message.from_user.id
+        if (bot_key, admin_id) not in pending_broadcast:
+            return
+                
+        info = pending_broadcast[(bot_key, admin_id)]
+        # Only proceed if they opted for a button, provided text but not yet URL
+        if info.get("button_option") and "button_text" in info and "button_url" not in info:
+            text = message.text.strip()
+            if not (text.startswith("http://") or text.startswith("https://")):
+                return await message.reply_text(
+                    "Invalid URL provided. Please send a valid URL starting with http:// or https://"
+                )
+            info["button_url"] = text
+            # Preview it
+            preview_kb = types.InlineKeyboardMarkup([
+                [types.InlineKeyboardButton(info["button_text"], url=info["button_url"])]
+            ])
+            await message.reply_text(
+                "Here is a preview of your inline button:", 
+                reply_markup=preview_kb
+            )
+            # Next: ask if they want an extra button
+            await message.reply_text("Do you want to add an extra inline button? Reply with 'yes' or 'no'.")
 
-    Here is the list of available titles to analyze:
-    {content_str}
+    # Group 5: Capture the extra inline button option.
+    @app.on_message(
+        filters.user(ADMIN_ID)
+        & filters.regex("^(yes|no)$", flags=re.IGNORECASE)
+        & ~filters.command(["broadcast", "cancelbroadcast"]),
+        group=5
+    )
+    async def capture_extra_button_option(client, message):
+        admin_id = message.from_user.id
+        if (bot_key, admin_id) not in pending_broadcast:
+            return
+                
+        info = pending_broadcast[(bot_key, admin_id)]
+        # Only if they said yes to a primary button and haven't decided on extra yet
+        if info.get("button_option") and "button_url" in info and "extra_button_option" not in info:
+            option = message.text.strip().lower()
+            if option == "yes":
+                info["extra_button_option"] = True
+                await message.reply_text("Please send me the extra inline button text.")
+            elif option == "no":
+                info["extra_button_option"] = False
+                confirm_kb = types.InlineKeyboardMarkup([
+                    [
+                        types.InlineKeyboardButton("Confirm", callback_data="confirm_broadcast"),
+                        types.InlineKeyboardButton("Cancel",  callback_data="cancel_broadcast"),
+                    ]
+                ])
+                await message.reply_text(
+                    "Do you want to broadcast the content with the inline button?",
+                    reply_markup=confirm_kb
+                )
+            else:
+                await message.reply_text("Invalid response. Please reply with 'yes' or 'no'.")
+
+    # Group 6: Capture the extra inline button text.
+    @app.on_message(
+        filters.user(ADMIN_ID)
+        & ~filters.regex("^(yes|no)$", flags=re.IGNORECASE)
+        & ~filters.command(["broadcast", "cancelbroadcast"]),
+        group=6
+    )
+    async def capture_extra_button_text(client, message):
+        admin_id = message.from_user.id
+        if (bot_key, admin_id) not in pending_broadcast:
+            return
+                
+        info = pending_broadcast[(bot_key, admin_id)]
+        # Only if they opted for an extra button and haven't given its text yet
+        if info.get("extra_button_option") and "extra_button_text" not in info:
+            text = message.text.strip()
+            if text:
+                info["extra_button_text"] = text
+                await message.reply_text("Please send me the extra inline button URL.")
+            else:
+                await message.reply_text("Please send a valid extra button text.")
+
+    # Group 7: Capture the extra inline button URL and send a preview.
+    @app.on_message(
+        filters.user(ADMIN_ID)
+        & ~filters.command(["broadcast", "cancelbroadcast"]),
+        group=7
+    )
+    async def capture_extra_button_url(client, message):
+        admin_id = message.from_user.id
+        if (bot_key, admin_id) not in pending_broadcast:
+            return
+                
+        info = pending_broadcast[(bot_key, admin_id)]
+        # Only if they said “yes” to extra and provided text but not URL
+        if info.get("extra_button_option") and "extra_button_text" in info and "extra_button_url" not in info:
+            text = message.text.strip()
+            if not (text.startswith("http://") or text.startswith("https://")):
+                return await message.reply_text(
+                    "Invalid URL provided for the extra button. Please send a valid URL starting with http:// or https://"
+                )
+            info["extra_button_url"] = text
+
+            # Preview both buttons
+            preview_kb = types.InlineKeyboardMarkup([
+                [ types.InlineKeyboardButton(info["button_text"], url=info["button_url"]) ],
+                [ types.InlineKeyboardButton(info["extra_button_text"], url=info["extra_button_url"]) ]
+            ])
+            await message.reply_text(
+                "Here is a preview of your inline buttons:",
+                reply_markup=preview_kb
+            )
+
+            # Final confirm/cancel
+            confirm_kb = types.InlineKeyboardMarkup([
+                [
+                    types.InlineKeyboardButton("Confirm", callback_data="confirm_broadcast"),
+                    types.InlineKeyboardButton("Cancel",  callback_data="cancel_broadcast")
+                ]
+            ])
+            await message.reply_text(
+                "Do you want to broadcast the content with the inline buttons?",
+                reply_markup=confirm_kb
+            )
+
+# ---------------- BROADCAST HANDLERS (existing cancel & confirm) ----------------
+    @app.on_message(filters.command("cancelbroadcast") & filters.user(ADMIN_ID))
+    async def cancel_broadcast_command(client, message):
+      admin_id = message.from_user.id
+
+      cancel_broadcast_flag[(bot_key, admin_id)] = True
+      pending_broadcast.pop((bot_key, admin_id), None)
+      
+      await message.reply_text(
+        "✅ Broadcast cancelled. All pending broadcasts have been cleared."
+      )
+
+    # Callback for confirm/cancel
+    @app.on_callback_query(filters.user(ADMIN_ID))
+    async def broadcast_confirmation(client, callback_query):
+        admin_id = callback_query.from_user.id
+        key = (bot_key, admin_id)
+
+        if callback_query.data not in ("confirm_broadcast", "cancel_broadcast"):
+            return
+
+        if callback_query.data == "cancel_broadcast":
+            cancel_broadcast_flag[key] = True
+            await callback_query.answer("Broadcast cancelled.", show_alert=True)
+            await callback_query.message.edit_text("Broadcast cancelled.")
+            pending_broadcast.pop(key, None)
+            return
+
+        # callback_query.data == "confirm_broadcast"
+        if key not in pending_broadcast or "content_msg" not in pending_broadcast[key]:
+            await callback_query.answer("No broadcast content found.", show_alert=True)
+            return
+
+        # Instead of running inline, we launch run_broadcast as background task
+        cancel_broadcast_flag[key] = False
+        broadcast_info = pending_broadcast[key]
+        content_msg = broadcast_info["content_msg"]
+
+        users_dict = await read_users_node()
+        recipients = [int(uid) for uid in users_dict.keys()]
+
+        if not recipients:
+            await callback_query.answer("No recipients found.", show_alert=True)
+            return
+
+        # Edit the admin message like your original flow
+        try:
+            progress_msg = await callback_query.message.edit_text("Broadcast started...")
+        except:
+            progress_msg = None
+
+        # create a broadcast id and schedule the runner as a background task
+        broadcast_id = "".join(random.choice(string.ascii_letters) for _ in range(6))
+        # start the task
+        task = asyncio.create_task(run_broadcast(client, broadcast_id, broadcast_info, recipients, admin_id, progress_message=progress_msg))
+        broadcast_task_map[broadcast_id] = task
+
+        # reply to admin that it's started and give the id
+        await callback_query.answer(f"Broadcast started (ID: {broadcast_id})", show_alert=True)
+
+        # clear pending_broadcast entry (like original)
+        pending_broadcast.pop(key, None)
+
+# ----------------- AIOHTTP control panel (start/cancel + websocket) -----------------
+routes = web.RouteTableDef()
+
+@routes.post("/broadcasts/{bot_suffix}/start")
+async def http_start_broadcast(request):
     """
+    Start a broadcast from web. Request JSON shape:
+    {
+      "admin_id": 7506651658,
+      "recipients": [12345, 23456],
+      "broadcast_info": {
+         "content_msg": { "text": "...", "caption": "...", "media_file_id": "...", "media_type": "photo" },
+         "button_option": false,
+         ...
+      }
+    }
+    """
+    bot_suffix = request.match_info["bot_suffix"]
+    client = CLIENTS.get(bot_suffix)
+    if client is None:
+        return web.json_response({"error": "unknown bot"}, status=404)
 
     try:
-        completion = openrouter_client.chat.completions.create(
-            model="google/gemini-1.5-flash",
-            messages=[
-                {"role": "system", "content": "You are a movie and TV recommendation expert who gives one single, perfectly formatted recommendation."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.7,
-            max_tokens=150,
+        data = await request.json()
+    except:
+        return web.json_response({"error": "invalid json"}, status=400)
+
+    admin_id = data.get("admin_id")
+    recipients = data.get("recipients", [])
+    broadcast_info = data.get("broadcast_info")
+
+    if not admin_id or not recipients or not broadcast_info:
+        return web.json_response({"error": "admin_id, recipients, broadcast_info required"}, status=400)
+
+    # generate id and start task
+    broadcast_id = "".join(random.choice(string.ascii_letters) for _ in range(6))
+    # run in background
+    task = asyncio.create_task(run_broadcast(client, broadcast_id, broadcast_info, recipients, admin_id, progress_message=None))
+    broadcast_task_map[broadcast_id] = task
+
+    return web.json_response({"status": "started", "broadcast_id": broadcast_id})
+
+@routes.post("/broadcasts/{broadcast_id}/cancel")
+async def http_cancel_broadcast(request):
+    broadcast_id = request.match_info["broadcast_id"]
+    # mark cancel flag
+    cancel_broadcast_by_id[broadcast_id] = True
+
+    # also try to cancel the running asyncio task (best-effort)
+    task = broadcast_task_map.get(broadcast_id)
+    if task and not task.done():
+        try:
+            task.cancel()
+        except:
+            pass
+
+    return web.json_response({"status": "cancelling", "broadcast_id": broadcast_id})
+
+@routes.get("/ws/{broadcast_id}")
+async def websocket_progress(request):
+    """
+    Connect via websocket to receive JSON progress updates.
+    The server will send dicts and finally a None-sentinel wrapped as {"final": true, ...}
+    """
+    broadcast_id = request.match_info["broadcast_id"]
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+
+    # wait a short while for queue to appear
+    waited = 0.0
+    while broadcast_id not in progress_queues and waited < 5.0:
+        await asyncio.sleep(0.1)
+        waited += 0.1
+
+    q = progress_queues.get(broadcast_id)
+    if q is None:
+        await ws.send_json({"error": "no such broadcast or not started yet"})
+        await ws.close()
+        return ws
+
+    try:
+        while True:
+            payload = await q.get()
+            if payload is None:
+                # final sentinel - inform client then close
+                await ws.send_json({"final": True})
+                break
+            await ws.send_json(payload)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await ws.close()
+        return ws
+
+# ----------------- BOOTSTRAP / MAIN -----------------
+async def start_aiohttp_app(port: int = 8080):
+    app = web.Application()
+    app.add_routes(routes)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"🌐 aiohttp control panel started on port {port}")
+    return runner
+
+async def main():
+    bots = []
+    sessions = []
+
+    # instantiate each bot + its aiohttp session + register handlers
+    for cfg in BOTS:
+        session = aiohttp.ClientSession()
+        sessions.append(session)
+
+        rd, pd, gs, ru = make_db_helpers(cfg["db_url"], session)
+
+        app = Client(
+            name=f"bot_{cfg['bot_token'][-5:]}",
+            api_id=cfg["api_id"],
+            api_hash=cfg["api_hash"],
+            bot_token=cfg["bot_token"]
         )
-        return completion.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"❌ Error communicating with OpenRouter/Gemini: {e}")
-        # Provide a fallback random suggestion if AI fails
-        random_pick = random.choice(content_list)
-        title = random_pick.get('title') or random_pick.get('name')
-        year = (random_pick.get('release_date') or random_pick.get('first_air_date', ''))[:4]
-        return f"**{title} ({year})**: The AI is napping, but this randomly selected popular choice is highly rated and worth a look!"
 
-# --- 5. Main Execution ---
+        # keep mapping so web endpoints can select client by suffix
+        CLIENTS[cfg['bot_token'][-5:]] = app
 
-def main():
-    """Main function to get one suggestion from each platform."""
-    print("\n" + "=" * 50)
-    print("🎬 Your Curated Streaming Trio (India Edition) 🍿")
-    print("=" * 50)
+        register_broadcast_handlers(app, rd, pd, gs, ru)
+        bots.append((cfg, app))
 
-    all_suggestions = []
+    # start clients
+    for cfg, app in bots:
+        bot_name = cfg["name"]
+        try:
+            await app.start()
+            print(f"✅ {bot_name} Bot has started")
+        except Exception as e:
+            print(f"❌ {bot_name} Bot failed to start: {e}")
 
-    # --- Iterate through each platform to get one suggestion ---
-    for platform_name, provider_id in PLATFORM_PROVIDERS.items():
-        print(f"\n----- Searching on {platform_name} -----")
-        # Randomly choose between movie or tv for variety
-        media_type = random.choice(['movie', 'tv'])
-        media_type_plural = "TV Shows" if media_type == 'tv' else 'Movies'
-        
-        content_list = get_content_from_cache_or_api(platform_name, provider_id, media_type)
-        
-        suggestion_text = ""
-        if not content_list:
-            suggestion_text = f"Couldn't find any top-rated {media_type_plural} on {platform_name} right now. Check back later!"
-        else:
-            suggestion_text = get_gemini_single_suggestion(content_list, platform_name, media_type_plural)
-            
-        all_suggestions.append({
-            "platform": platform_name,
-            "suggestion": suggestion_text
-        })
+    # start aiohttp on configured PORT or 8080
+    port = int(os.environ.get("PORT", "8080"))
+    aio_runner = await start_aiohttp_app(port)
 
-    # --- Display all collected suggestions at the end ---
-    print("\n\n" + "="*20 + " YOUR PICKS FOR TONIGHT " + "="*19)
-    
-    for item in all_suggestions:
-        print(f"\n✨ Your recommendation from {item['platform']}:")
-        print(f"   {item['suggestion']}")
-        
-    print("\n" + "="*59)
+    print("🚀 All valid bots started. Press Ctrl+C to stop.")
+    # keep running until interrupted
+    try:
+        await idle()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        # shutdown web server
+        try:
+            await aio_runner.cleanup()
+            print("🛑 aiohttp server stopped")
+        except:
+            pass
 
+        # stop all bots and close sessions
+        for cfg, app in bots:
+            bot_name = cfg["name"]
+            if app.is_running:
+                try:
+                    await app.stop()
+                    print(f"🛑 {bot_name} Bot stopped")
+                except:
+                    pass
+
+        for session in sessions:
+            try:
+                await session.close()
+            except:
+                pass
+        print("🔒 Closed aiohttp sessions and cleaned up")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
