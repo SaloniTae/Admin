@@ -1,4 +1,4 @@
-# file: broadcaster_with_web.py
+# broadcaster_with_web.py
 import os
 import asyncio
 import random
@@ -8,14 +8,14 @@ import datetime
 import logging
 import aiofiles
 import aiohttp
-import re
+import json
 from aiohttp import web
 from pyrogram import idle
 
 from pyrogram import Client, filters, types
 from pyrogram.errors import FloodWait, InputUserDeactivated, UserIsBlocked, PeerIdInvalid
 
-# ---------------- USER CONFIG ----------------
+# ---------------- USER CONFIG (patched as you requested) ----------------
 BOTS = [
     {
         "api_id": 25270711,
@@ -26,22 +26,22 @@ BOTS = [
     },
 ]
 
-
 ADMIN_ID = [8104243004, 2031595742, 1785564615, 5300690945, 7067405716]
 BROADCAST_AS_COPY = True
 BATCH_SIZE = 1000
-# ----------------------------------------------
+# ------------------------------------------------------------------------
 
-# existing in-memory states from your original code (kept)
+# In-memory original state (preserved)
 pending_broadcast = {}
-cancel_broadcast_flag = {}   # your original key: (bot_key, admin_id) -> bool
+cancel_broadcast_flag = {}   # (bot_key, admin_id) -> bool
 
-# new structures for web control + mapping
-CLIENTS = {}                 # map bot_token_suffix -> pyrogram Client
+# New global structures for web control + mapping + DB helpers
+CLIENTS = {}                 # bot_suffix -> pyrogram Client
+DB_HELPERS = {}              # bot_suffix -> (read_node, patch_node, get_shallow_keys, read_users_node)
 progress_queues = {}         # broadcast_id -> asyncio.Queue
 cancel_broadcast_by_id = {}  # broadcast_id -> bool
 broadcast_task_map = {}      # broadcast_id -> asyncio.Task
-broadcast_id_to_key = {}     # broadcast_id -> (bot_key, admin_id) - for telegram cancel cross-check
+broadcast_id_to_key = {}     # broadcast_id -> (bot_key, admin_id)
 
 # ---------------- DB helpers (unchanged) ----------------
 def make_db_helpers(db_url: str, session: aiohttp.ClientSession):
@@ -78,17 +78,18 @@ def make_db_helpers(db_url: str, session: aiohttp.ClientSession):
 # ----------------- BROADCAST RUNNER (callable) -----------------
 async def run_broadcast(client: Client, broadcast_id: str, broadcast_info: dict, recipients: list, admin_id: int, progress_message=None):
     """
-    Runs the broadcast. broadcast_info may be:
-      - the same dict you stored in pending_broadcast (where content_msg is a pyrogram Message)
-      - OR a dict coming from web with keys: content_msg {text, caption, media_file_id, media_type}, and button fields
-    progress_message: if provided, will be edited for live updates (keeps original UX).
+    Runs the broadcast and publishes progress to both:
+     - the admin Telegram progress message (edited)
+     - websocket listeners via progress_queues[broadcast_id]
+    broadcast_info:
+      - if composed in Telegram, content_msg is a pyrogram.Message object (the original flow)
+      - if triggered from web, content_msg is a dict with keys: text, caption, media_file_id, media_type
     """
-    # Map the broadcast_id back to the key so telegram / cancel command can work
     bot_key = client.bot_token
     key = (bot_key, admin_id)
     broadcast_id_to_key[broadcast_id] = key
 
-    # create queue for websocket listeners
+    # queue for websocket listeners
     q = asyncio.Queue()
     progress_queues[broadcast_id] = q
     cancel_broadcast_by_id[broadcast_id] = False
@@ -99,14 +100,14 @@ async def run_broadcast(client: Client, broadcast_id: str, broadcast_info: dict,
     success = 0
     failed = 0
 
-    # fallback: if no progress_message passed, send a new one
+    # If no progress_message provided, send initial progress message to admin
     if progress_message is None:
         try:
             progress_message = await client.send_message(admin_id, "Broadcast started...")
         except:
             progress_message = None
 
-    # prepare keyboard builder helper
+    # helper to build inline keyboard
     def build_keyboard(info):
         if info.get("button_option"):
             if info.get("extra_button_option"):
@@ -122,11 +123,11 @@ async def run_broadcast(client: Client, broadcast_id: str, broadcast_info: dict,
 
     custom_keyboard = build_keyboard(broadcast_info)
 
+    # append logs (keeps original broadcast.txt behavior)
     async with aiofiles.open("broadcast.txt", "a") as log_file:
         try:
-            # Iterate in batches - same logic as your original loop
             for batch_start in range(0, total_users, BATCH_SIZE):
-                # Check cancel flags (from Telegram cancel command or from web cancel endpoint)
+                # check both cancel mechanisms
                 if cancel_broadcast_flag.get(key) or cancel_broadcast_by_id.get(broadcast_id):
                     break
 
@@ -136,43 +137,20 @@ async def run_broadcast(client: Client, broadcast_id: str, broadcast_info: dict,
                         break
 
                     try:
-                        # Support both pyrogram Message stored in broadcast_info["content_msg"]
-                        # or a simplified dict coming from web control.
                         content = broadcast_info.get("content_msg")
-                        # If it's a pyrogram Message object (composed in telegram), handle same as before:
+                        # If it's a pyrogram Message object (composed in Telegram)
                         if hasattr(content, "media") or hasattr(content, "text") or hasattr(content, "caption"):
-                            # this is the original flow - use message attributes
                             if getattr(content, "media", False):
                                 if hasattr(content, "photo") and content.photo:
-                                    await client.send_photo(
-                                        chat_id=user,
-                                        photo=content.photo.file_id,
-                                        caption=content.caption or "",
-                                        reply_markup=custom_keyboard
-                                    )
+                                    await client.send_photo(chat_id=user, photo=content.photo.file_id, caption=content.caption or "", reply_markup=custom_keyboard)
                                 elif hasattr(content, "video") and content.video:
-                                    await client.send_video(
-                                        chat_id=user,
-                                        video=content.video.file_id,
-                                        caption=content.caption or "",
-                                        reply_markup=custom_keyboard
-                                    )
+                                    await client.send_video(chat_id=user, video=content.video.file_id, caption=content.caption or "", reply_markup=custom_keyboard)
                                 else:
-                                    await client.send_message(
-                                        chat_id=user,
-                                        text=content.caption or "",
-                                        reply_markup=custom_keyboard
-                                    )
+                                    await client.send_message(chat_id=user, text=content.caption or "", reply_markup=custom_keyboard)
                             else:
-                                await client.send_message(
-                                    chat_id=user,
-                                    text=content.text or "",
-                                    reply_markup=custom_keyboard
-                                )
+                                await client.send_message(chat_id=user, text=content.text or "", reply_markup=custom_keyboard)
                         else:
-                            # possibility: content is a dict sent via web endpoint
-                            # expected keys:
-                            # content_msg: { "text": "...", "caption": "...", "media_file_id": "...", "media_type": "photo"/"video" }
+                            # content from web (dict)
                             if isinstance(content, dict):
                                 if content.get("media_file_id"):
                                     mtype = content.get("media_type", "photo")
@@ -185,22 +163,22 @@ async def run_broadcast(client: Client, broadcast_id: str, broadcast_info: dict,
                                 else:
                                     await client.send_message(chat_id=user, text=content.get("text","") or content.get("caption",""), reply_markup=custom_keyboard)
                             else:
-                                # unknown content shape - fallback
+                                # fallback
                                 await client.send_message(chat_id=user, text=str(content), reply_markup=custom_keyboard)
 
                         success += 1
                     except Exception as e:
-                        # log error (append)
                         await log_file.write(f"{user} : {str(e)}\n")
                         failed += 1
                     done += 1
 
-                    # publish progress every few messages (your original used 10)
+                    # publish progress at same cadence as original (every 10)
                     if done % 10 == 0 or done == total_users:
                         elapsed = time.time() - start_time
                         avg_time = elapsed / done if done else 0
                         remaining = int((total_users - done) * avg_time) if total_users - done > 0 else 0
                         percent = (done / total_users) * 100 if total_users else 0.0
+                        # edit admin message (best-effort)
                         text = (
                             f"𝗕𝗿𝗼𝗮𝗱𝗰𝗮𝘀𝘁 𝗣𝗿𝗼𝗴𝗿𝗲𝘀𝘀 ⚡ (ID: {broadcast_id}):\n\n"
                             f"🚀 𝙎𝙚𝙣𝙩: {done}/{total_users} ({percent:.1f}%)\n\n"
@@ -208,28 +186,23 @@ async def run_broadcast(client: Client, broadcast_id: str, broadcast_info: dict,
                             f"⏱️ 𝖤𝗅𝖺𝗉𝗌𝖾𝖽:  {datetime.timedelta(seconds=int(elapsed))}\n"
                             f"⏱️ 𝖱𝖾𝗆𝖺𝗂𝗇𝗂𝗇𝗀: {datetime.timedelta(seconds=int(remaining))}"
                         )
-                        # push to progress queue for websocket clients
+                        # push to websocket queue
                         await q.put({
                             "broadcast_id": broadcast_id,
                             "done": done, "total": total_users,
                             "success": success, "failed": failed,
-                            "percent": round(percent, 1),
+                            "percent": round(percent,1),
                             "elapsed_seconds": int(elapsed),
                             "remaining_seconds": remaining,
                         })
-                        # edit admin progress message if possible (best-effort)
                         if progress_message:
                             try:
                                 await progress_message.edit_text(text)
                             except:
-                                # ignore edit failures (message edited elsewhere)
                                 await asyncio.sleep(0.2)
 
-                # small batch delay like your original
                 await asyncio.sleep(3)
-
         finally:
-            # final publish & cleanup
             total_time = datetime.timedelta(seconds=int(time.time() - start_time))
             status = "cancelled" if (cancel_broadcast_flag.get(key) or cancel_broadcast_by_id.get(broadcast_id)) else "completed"
             final_summary = {
@@ -239,45 +212,38 @@ async def run_broadcast(client: Client, broadcast_id: str, broadcast_info: dict,
                 "status": status,
                 "total_time": str(total_time),
             }
-            # push final then sentinel
             await q.put(final_summary)
             await q.put(None)
-
-            # cleanup maps after short delay
+            # cleanup
             await asyncio.sleep(0.05)
             cancel_broadcast_by_id.pop(broadcast_id, None)
             progress_queues.pop(broadcast_id, None)
             broadcast_task_map.pop(broadcast_id, None)
             broadcast_id_to_key.pop(broadcast_id, None)
-
-            # send summary to admin (as original)
+            # send admin summary message (same UX)
             try:
                 summary_text = (
                     f"Broadcast {'CANCELLED' if final_summary['status']=='cancelled' else 'COMPLETED'} (ID: {broadcast_id})\n\n"
                     f"👥 𝗧𝗼𝘁𝗮𝗹: {total_users}\n"
                     f"🚀 𝗦𝗲𝗻𝘁: {done}/{total_users}\n\n"
                     f"✅ 𝖲𝗎𝖼𝖼𝖾𝗌𝗌: {success} | ❎ 𝖥𝖺𝗂𝗅𝖾𝖽: {failed}\n\n"
-                    f"⏱️ 𝖥𝗂𝗇𝗂𝖲𝗁𝖾𝗗 𝗂𝗇: {total_time}"
+                    f"⏱️ 𝗙𝗶𝗻𝗶𝘀𝗵𝗲𝗱 𝗶𝗻: {total_time}"
                 )
                 await client.send_message(admin_id, summary_text)
             except:
                 pass
 
-# ----------------- REGISTER BROADCAST HANDLERS (original) -----------------
+# ----------------- REGISTER BROADCAST HANDLERS (original logic preserved) -----------------
 def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, read_users_node):
     bot_key = app.bot_token
     
-    # Step 1: /broadcast command
     @app.on_message(filters.command("broadcast") & filters.user(ADMIN_ID))
     async def broadcast_command(client, message):
         admin_id = message.from_user.id
         pending_broadcast[(bot_key, admin_id)] = {}
         cancel_broadcast_flag[(bot_key, admin_id)] = False
-        await message.reply_text(
-            "Please send me the content (text or media) that you want to broadcast."
-        )
+        await message.reply_text("Please send me the content (text or media) that you want to broadcast.")
 
-    # Group 1: Capture the content
     @app.on_message(
         filters.user(ADMIN_ID)
         & ~filters.command(["broadcast", "cancelbroadcast"]),
@@ -291,11 +257,8 @@ def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, re
         info = pending_broadcast[(bot_key, admin_id)]
         if "content_msg" not in info:
             info["content_msg"] = message
-            await message.reply_text(
-                "Do you want to include an inline button? Reply with 'yes' or 'no'."
-            )
+            await message.reply_text("Do you want to include an inline button? Reply with 'yes' or 'no'.")
 
-    # Group 2: Yes/No for inline button
     @app.on_message(
         filters.user(ADMIN_ID)
         & filters.regex("^(yes|no)$", flags=re.IGNORECASE)
@@ -312,9 +275,7 @@ def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, re
         if "content_msg" in broadcast_info and "button_option" not in broadcast_info:
             if option == "yes":
                 broadcast_info["button_option"] = True
-                await message.reply_text(
-                    "Please send me the inline button text you want to include in the broadcast."
-                )
+                await message.reply_text("Please send me the inline button text you want to include in the broadcast.")
             elif option == "no":
                 broadcast_info["button_option"] = False
                 confirm_kb = types.InlineKeyboardMarkup([
@@ -323,14 +284,10 @@ def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, re
                         types.InlineKeyboardButton("Cancel",  callback_data="cancel_broadcast"),
                     ]
                 ])
-                await message.reply_text(
-                    "Do you want to broadcast the content without an inline button?",
-                    reply_markup=confirm_kb
-                )
+                await message.reply_text("Do you want to broadcast the content without an inline button?", reply_markup=confirm_kb)
             else:
                 await message.reply_text("Invalid response. Please reply with 'yes' or 'no'.")
 
-    # Group 3: Capture the inline button text
     @app.on_message(
         filters.user(ADMIN_ID)
         & ~filters.regex("^(yes|no)$", flags=re.IGNORECASE)
@@ -345,13 +302,10 @@ def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, re
         if broadcast_info.get("button_option") and "button_text" not in broadcast_info:
             if message.text:
                 broadcast_info["button_text"] = message.text.strip()
-                await message.reply_text(
-                    "Please send me the inline button URL for the button."
-                )
+                await message.reply_text("Please send me the inline button URL for the button.")
             else:
                 await message.reply_text("Please send a valid button text.")
 
-    # Group 4: Capture the primary inline button URL.
     @app.on_message(
         filters.user(ADMIN_ID)
         & ~filters.command(["broadcast", "cancelbroadcast"]),
@@ -363,26 +317,15 @@ def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, re
             return
                 
         info = pending_broadcast[(bot_key, admin_id)]
-        # Only proceed if they opted for a button, provided text but not yet URL
         if info.get("button_option") and "button_text" in info and "button_url" not in info:
             text = message.text.strip()
             if not (text.startswith("http://") or text.startswith("https://")):
-                return await message.reply_text(
-                    "Invalid URL provided. Please send a valid URL starting with http:// or https://"
-                )
+                return await message.reply_text("Invalid URL provided. Please send a valid URL starting with http:// or https://")
             info["button_url"] = text
-            # Preview it
-            preview_kb = types.InlineKeyboardMarkup([
-                [types.InlineKeyboardButton(info["button_text"], url=info["button_url"])]
-            ])
-            await message.reply_text(
-                "Here is a preview of your inline button:", 
-                reply_markup=preview_kb
-            )
-            # Next: ask if they want an extra button
+            preview_kb = types.InlineKeyboardMarkup([[types.InlineKeyboardButton(info["button_text"], url=info["button_url"])]])
+            await message.reply_text("Here is a preview of your inline button:", reply_markup=preview_kb)
             await message.reply_text("Do you want to add an extra inline button? Reply with 'yes' or 'no'.")
 
-    # Group 5: Capture the extra inline button option.
     @app.on_message(
         filters.user(ADMIN_ID)
         & filters.regex("^(yes|no)$", flags=re.IGNORECASE)
@@ -395,7 +338,6 @@ def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, re
             return
                 
         info = pending_broadcast[(bot_key, admin_id)]
-        # Only if they said yes to a primary button and haven't decided on extra yet
         if info.get("button_option") and "button_url" in info and "extra_button_option" not in info:
             option = message.text.strip().lower()
             if option == "yes":
@@ -409,14 +351,10 @@ def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, re
                         types.InlineKeyboardButton("Cancel",  callback_data="cancel_broadcast"),
                     ]
                 ])
-                await message.reply_text(
-                    "Do you want to broadcast the content with the inline button?",
-                    reply_markup=confirm_kb
-                )
+                await message.reply_text("Do you want to broadcast the content with the inline button?", reply_markup=confirm_kb)
             else:
                 await message.reply_text("Invalid response. Please reply with 'yes' or 'no'.")
 
-    # Group 6: Capture the extra inline button text.
     @app.on_message(
         filters.user(ADMIN_ID)
         & ~filters.regex("^(yes|no)$", flags=re.IGNORECASE)
@@ -429,7 +367,6 @@ def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, re
             return
                 
         info = pending_broadcast[(bot_key, admin_id)]
-        # Only if they opted for an extra button and haven't given its text yet
         if info.get("extra_button_option") and "extra_button_text" not in info:
             text = message.text.strip()
             if text:
@@ -438,7 +375,6 @@ def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, re
             else:
                 await message.reply_text("Please send a valid extra button text.")
 
-    # Group 7: Capture the extra inline button URL and send a preview.
     @app.on_message(
         filters.user(ADMIN_ID)
         & ~filters.command(["broadcast", "cancelbroadcast"]),
@@ -450,50 +386,31 @@ def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, re
             return
                 
         info = pending_broadcast[(bot_key, admin_id)]
-        # Only if they said “yes” to extra and provided text but not URL
         if info.get("extra_button_option") and "extra_button_text" in info and "extra_button_url" not in info:
             text = message.text.strip()
             if not (text.startswith("http://") or text.startswith("https://")):
-                return await message.reply_text(
-                    "Invalid URL provided for the extra button. Please send a valid URL starting with http:// or https://"
-                )
+                return await message.reply_text("Invalid URL provided for the extra button. Please send a valid URL starting with http:// or https://")
             info["extra_button_url"] = text
-
-            # Preview both buttons
             preview_kb = types.InlineKeyboardMarkup([
                 [ types.InlineKeyboardButton(info["button_text"], url=info["button_url"]) ],
                 [ types.InlineKeyboardButton(info["extra_button_text"], url=info["extra_button_url"]) ]
             ])
-            await message.reply_text(
-                "Here is a preview of your inline buttons:",
-                reply_markup=preview_kb
-            )
-
-            # Final confirm/cancel
+            await message.reply_text("Here is a preview of your inline buttons:", reply_markup=preview_kb)
             confirm_kb = types.InlineKeyboardMarkup([
                 [
                     types.InlineKeyboardButton("Confirm", callback_data="confirm_broadcast"),
                     types.InlineKeyboardButton("Cancel",  callback_data="cancel_broadcast")
                 ]
             ])
-            await message.reply_text(
-                "Do you want to broadcast the content with the inline buttons?",
-                reply_markup=confirm_kb
-            )
+            await message.reply_text("Do you want to broadcast the content with the inline buttons?", reply_markup=confirm_kb)
 
-# ---------------- BROADCAST HANDLERS (existing cancel & confirm) ----------------
     @app.on_message(filters.command("cancelbroadcast") & filters.user(ADMIN_ID))
     async def cancel_broadcast_command(client, message):
       admin_id = message.from_user.id
-
       cancel_broadcast_flag[(bot_key, admin_id)] = True
       pending_broadcast.pop((bot_key, admin_id), None)
-      
-      await message.reply_text(
-        "✅ Broadcast cancelled. All pending broadcasts have been cleared."
-      )
+      await message.reply_text("✅ Broadcast cancelled. All pending broadcasts have been cleared.")
 
-    # Callback for confirm/cancel
     @app.on_callback_query(filters.user(ADMIN_ID))
     async def broadcast_confirmation(client, callback_query):
         admin_id = callback_query.from_user.id
@@ -509,58 +426,48 @@ def register_broadcast_handlers(app, read_node, patch_node, get_shallow_keys, re
             pending_broadcast.pop(key, None)
             return
 
-        # callback_query.data == "confirm_broadcast"
         if key not in pending_broadcast or "content_msg" not in pending_broadcast[key]:
             await callback_query.answer("No broadcast content found.", show_alert=True)
             return
 
-        # Instead of running inline, we launch run_broadcast as background task
         cancel_broadcast_flag[key] = False
         broadcast_info = pending_broadcast[key]
         content_msg = broadcast_info["content_msg"]
 
+        # fetch recipients from Firebase (same as your original flow)
         users_dict = await read_users_node()
-        recipients = [int(uid) for uid in users_dict.keys()]
+        recipients = [int(uid) for uid in users_dict.keys()] if users_dict else []
 
         if not recipients:
             await callback_query.answer("No recipients found.", show_alert=True)
             return
 
-        # Edit the admin message like your original flow
         try:
             progress_msg = await callback_query.message.edit_text("Broadcast started...")
         except:
             progress_msg = None
 
-        # create a broadcast id and schedule the runner as a background task
         broadcast_id = "".join(random.choice(string.ascii_letters) for _ in range(6))
-        # start the task
         task = asyncio.create_task(run_broadcast(client, broadcast_id, broadcast_info, recipients, admin_id, progress_message=progress_msg))
         broadcast_task_map[broadcast_id] = task
 
-        # reply to admin that it's started and give the id
         await callback_query.answer(f"Broadcast started (ID: {broadcast_id})", show_alert=True)
-
-        # clear pending_broadcast entry (like original)
         pending_broadcast.pop(key, None)
 
-# ----------------- AIOHTTP control panel (start/cancel + websocket) -----------------
+# ----------------- AIOHTTP control panel: start/cancel/ws/health -----------------
 routes = web.RouteTableDef()
+
+@routes.get("/health")
+async def health(request):
+    return web.json_response({"status": "ok"})
+
+@routes.get("/broadcasts/active")
+async def list_active(request):
+    # return list of active broadcast ids
+    return web.json_response({"active_broadcasts": list(broadcast_task_map.keys())})
 
 @routes.post("/broadcasts/{bot_suffix}/start")
 async def http_start_broadcast(request):
-    """
-    Start a broadcast from web. Request JSON shape:
-    {
-      "admin_id": 7506651658,
-      "recipients": [12345, 23456],
-      "broadcast_info": {
-         "content_msg": { "text": "...", "caption": "...", "media_file_id": "...", "media_type": "photo" },
-         "button_option": false,
-         ...
-      }
-    }
-    """
     bot_suffix = request.match_info["bot_suffix"]
     client = CLIENTS.get(bot_suffix)
     if client is None:
@@ -572,15 +479,31 @@ async def http_start_broadcast(request):
         return web.json_response({"error": "invalid json"}, status=400)
 
     admin_id = data.get("admin_id")
-    recipients = data.get("recipients", [])
+    recipients = data.get("recipients")   # optional
     broadcast_info = data.get("broadcast_info")
 
-    if not admin_id or not recipients or not broadcast_info:
-        return web.json_response({"error": "admin_id, recipients, broadcast_info required"}, status=400)
+    if not admin_id or not broadcast_info:
+        return web.json_response({"error": "admin_id and broadcast_info required"}, status=400)
 
-    # generate id and start task
+    # if recipients not provided, read from firebase users node for that bot
+    if not recipients:
+        helpers = DB_HELPERS.get(bot_suffix)
+        if not helpers:
+            return web.json_response({"error": "no db helpers for this bot"}, status=500)
+        read_node, patch_node, get_shallow_keys, read_users_node = helpers
+        users_dict = await read_users_node()
+        if not users_dict:
+            return web.json_response({"error": "no recipients found in DB/users"}, status=400)
+        try:
+            recipients = [int(uid) for uid in users_dict.keys()]
+        except:
+            recipients = [int(k) for k in list(users_dict.keys())]
+
+    if not recipients:
+        return web.json_response({"error": "recipients list is empty"}, status=400)
+
+    # start broadcast
     broadcast_id = "".join(random.choice(string.ascii_letters) for _ in range(6))
-    # run in background
     task = asyncio.create_task(run_broadcast(client, broadcast_id, broadcast_info, recipients, admin_id, progress_message=None))
     broadcast_task_map[broadcast_id] = task
 
@@ -589,30 +512,41 @@ async def http_start_broadcast(request):
 @routes.post("/broadcasts/{broadcast_id}/cancel")
 async def http_cancel_broadcast(request):
     broadcast_id = request.match_info["broadcast_id"]
-    # mark cancel flag
     cancel_broadcast_by_id[broadcast_id] = True
-
-    # also try to cancel the running asyncio task (best-effort)
+    # try to cancel the asyncio task (best-effort)
     task = broadcast_task_map.get(broadcast_id)
     if task and not task.done():
         try:
             task.cancel()
         except:
             pass
-
     return web.json_response({"status": "cancelling", "broadcast_id": broadcast_id})
 
-@routes.get("/ws/{broadcast_id}")
-async def websocket_progress(request):
+# add this route (place it with your other aiohttp routes)
+@routes.get("/sse/{broadcast_id}")
+async def sse_progress(request):
     """
-    Connect via websocket to receive JSON progress updates.
-    The server will send dicts and finally a None-sentinel wrapped as {"final": true, ...}
+    Server-Sent Events endpoint that streams JSON progress updates.
+    Usage:
+      curl -N https://<host>/sse/<broadcast_id>
+    Browser: use EventSource("https://<host>/sse/<broadcast_id>")
     """
     broadcast_id = request.match_info["broadcast_id"]
-    ws = web.WebSocketResponse()
-    await ws.prepare(request)
 
-    # wait a short while for queue to appear
+    resp = web.StreamResponse(
+        status=200,
+        reason="OK",
+        headers={
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # allow cross-origin so you can open this from a static page anywhere
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+    await resp.prepare(request)
+
+    # wait a little for the broadcast to start (same as websocket waiter)
     waited = 0.0
     while broadcast_id not in progress_queues and waited < 5.0:
         await asyncio.sleep(0.1)
@@ -620,23 +554,42 @@ async def websocket_progress(request):
 
     q = progress_queues.get(broadcast_id)
     if q is None:
-        await ws.send_json({"error": "no such broadcast or not started yet"})
-        await ws.close()
-        return ws
+        # send an error event then close
+        err = json.dumps({"error": "no such broadcast or not started yet"})
+        await resp.write(f"data: {err}\n\n".encode())
+        try:
+            await resp.write_eof()
+        except:
+            pass
+        return resp
 
     try:
         while True:
             payload = await q.get()
             if payload is None:
-                # final sentinel - inform client then close
-                await ws.send_json({"final": True})
+                # final sentinel
+                final_payload = json.dumps({"final": True})
+                await resp.write(f"data: {final_payload}\n\n".encode())
                 break
-            await ws.send_json(payload)
+
+            # send JSON as an SSE "data:" event
+            data = json.dumps(payload)
+            await resp.write(f"data: {data}\n\n".encode())
+            # flush
+            try:
+                await resp.drain()
+            except:
+                # client likely disconnected, break out
+                break
+
     except asyncio.CancelledError:
         pass
     finally:
-        await ws.close()
-        return ws
+        try:
+            await resp.write_eof()
+        except:
+            pass
+        return resp
 
 # ----------------- BOOTSTRAP / MAIN -----------------
 async def start_aiohttp_app(port: int = 8080):
@@ -659,6 +612,8 @@ async def main():
         sessions.append(session)
 
         rd, pd, gs, ru = make_db_helpers(cfg["db_url"], session)
+        # store helpers for web endpoint usage
+        DB_HELPERS[cfg['bot_token'][-5:]] = (rd, pd, gs, ru)
 
         app = Client(
             name=f"bot_{cfg['bot_token'][-5:]}",
@@ -667,9 +622,7 @@ async def main():
             bot_token=cfg["bot_token"]
         )
 
-        # keep mapping so web endpoints can select client by suffix
         CLIENTS[cfg['bot_token'][-5:]] = app
-
         register_broadcast_handlers(app, rd, pd, gs, ru)
         bots.append((cfg, app))
 
@@ -687,20 +640,17 @@ async def main():
     aio_runner = await start_aiohttp_app(port)
 
     print("🚀 All valid bots started. Press Ctrl+C to stop.")
-    # keep running until interrupted
     try:
         await idle()
     except KeyboardInterrupt:
         pass
     finally:
-        # shutdown web server
         try:
             await aio_runner.cleanup()
             print("🛑 aiohttp server stopped")
         except:
             pass
 
-        # stop all bots and close sessions
         for cfg, app in bots:
             bot_name = cfg["name"]
             if app.is_running:
