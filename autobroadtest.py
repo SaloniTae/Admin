@@ -20,7 +20,7 @@ BOTS = [
     {
         "api_id": 25270711,
         "api_hash": "6bf18f3d9519a2de12ac1e2e0f5c383e",
-        "bot_token": "7140092976:AAHsqcw-hfs-Kb0aAgMof631fJ7DL1-NY_w",
+        "bot_token": "7140092976:AAEbBq9_XJYuAYjr58zYKbywMxqozEEKNT0",
         "db_url": "https://shivam-testingdb-default-rtdb.firebaseio.com/",
         "name": "Test Bot"
     },
