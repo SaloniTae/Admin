@@ -695,6 +695,24 @@ async def api_start_suggestion(request):
 
     return web.json_response({"status": "started", "broadcast_id": broadcast_id})
 
+
+@routes.get("/api/backdrop")
+async def api_backdrop(request):
+    media_type = request.rel_url.query.get("media_type")
+    tmdb_id = request.rel_url.query.get("id")
+    if not media_type or not tmdb_id:
+        return web.json_response({"error":"media_type and id required"}, status=400)
+
+    # call tmdb_module.get_backdrop_url via thread
+    try:
+        backdrop = await asyncio.to_thread(tmdb_module.get_backdrop_url, media_type, int(tmdb_id))
+    except Exception:
+        backdrop = None
+    if not backdrop:
+        return web.json_response({"backdrop": None}, status=404)
+    return web.json_response({"backdrop": backdrop})
+
+
 # add this route (place it with your other aiohttp routes)
 @routes.get("/sse/{broadcast_id}")
 async def sse_progress(request):
