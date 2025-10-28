@@ -702,15 +702,15 @@ async def api_backdrop(request):
     tmdb_id = request.rel_url.query.get("id")
     if not media_type or not tmdb_id:
         return web.json_response({"error":"media_type and id required"}, status=400)
-
-    # call tmdb_module.get_backdrop_url via thread
     try:
         backdrop = await asyncio.to_thread(tmdb_module.get_backdrop_url, media_type, int(tmdb_id))
     except Exception:
         backdrop = None
     if not backdrop:
         return web.json_response({"backdrop": None}, status=404)
-    return web.json_response({"backdrop": backdrop})
+    resp = web.json_response({"backdrop": backdrop})
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 
 # add this route (place it with your other aiohttp routes)
