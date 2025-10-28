@@ -810,34 +810,44 @@ async def main():
 
     # start aiohttp on configured PORT or 8080
     port = int(os.environ.get("PORT", "8080"))
-    aio_runner = await start_aiohttp_app(port)
+    aio_runner = None
+    try:
+        aio_runner = await start_aiohttp_app(port)
+    except Exception as e:
+        print(f"❌ Failed to start aiohttp server: {e}")
 
     print("🚀 All valid bots started. Press Ctrl+C to stop.")
     try:
         await idle()
     except KeyboardInterrupt:
-        pass
+        print("🛑 KeyboardInterrupt received, shutting down...")
     finally:
-        try:
-            await aio_runner.cleanup()
-            print("🛑 aiohttp server stopped")
-        except:
-            pass
+        # Clean up aiohttp runner
+        if aio_runner is not None:
+            try:
+                await aio_runner.cleanup()
+                print("🛑 aiohttp server stopped")
+            except Exception as e:
+                print(f"⚠️ Error stopping aiohttp runner: {e}")
 
+        # Stop each pyrogram client (best-effort)
         for cfg, app in bots:
             bot_name = cfg["name"]
-            if app.is_running:
-                try:
-                    await app.stop()
-                    print(f"🛑 {bot_name} Bot stopped")
-                except:
-                    pass
+            try:
+                # attempt to stop regardless of client attributes
+                await app.stop()
+                print(f"🛑 {bot_name} Bot stopped")
+            except Exception as e:
+                # print and continue
+                print(f"⚠️ Error stopping {bot_name} Bot (best-effort): {e}")
 
+        # Close each aiohttp session (best-effort)
         for session in sessions:
             try:
                 await session.close()
-            except:
-                pass
+            except Exception as e:
+                print(f"⚠️ Error closing aiohttp session: {e}")
+
         print("🔒 Closed aiohttp sessions and cleaned up")
 
 if __name__ == "__main__":
