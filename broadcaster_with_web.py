@@ -765,14 +765,42 @@ async def sse_progress(request):
         return resp
 
 # ----------------- BOOTSTRAP / MAIN -----------------
+# Simple CORS middleware for aiohttp
+@web.middleware
+async def cors_middleware(request, handler):
+    # Handle preflight
+    if request.method == "OPTIONS":
+        headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Allow-Credentials": "true",
+        }
+        return web.Response(status=204, headers=headers)
+
+    # Normal request -> call handler then attach CORS headers to response
+    resp = await handler(request)
+    # if the handler returned a plain value, wrap it
+    if not isinstance(resp, web.StreamResponse):
+        resp = web.json_response(resp)
+
+    # Set CORS headers for all responses (including SSE)
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    resp.headers["Access-Control-Allow-Credentials"] = "true"
+    return resp
+
 async def start_aiohttp_app(port: int = 8080):
-    app = web.Application()
+    # Attach the CORS middleware so every route gets the required headers
+    app = web.Application(middlewares=[cors_middleware])
     app.add_routes(routes)
+
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    print(f"🌐 aiohttp control panel started on port {port}")
+    print(f"🌐 aiohttp control panel started on port {port} (CORS enabled)")
     return runner
 
 async def main():
