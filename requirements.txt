@@ -2,3 +2,4 @@ pyrogram
 aiohttp
 aiofiles
 aiohttp[speedups]
+requests
