@@ -117,8 +117,8 @@ class AccountActions:
 
         api_url = "https://ulvis.net/API/write/get"
 
-        # 4 attempts
-        for attempt in range(1, 5):
+        # 3 attempts (shorter timeout to avoid long stalls when ulvis is slow)
+        for attempt in range(1, 4):
             # Generate a new alias for each attempt, in case of collision
             alias = self._rand_alias(4)
 
@@ -135,7 +135,7 @@ class AccountActions:
                 r = requests.get(
                     api_url,
                     params=params,
-                    timeout=(6, 18),
+                    timeout=(4, 10),
                     headers={"User-Agent": "oorbots/1.0"},
                 )
                 r.raise_for_status() # Raise exception for 4xx/5xx status codes
@@ -145,18 +145,18 @@ class AccountActions:
                 payload = await asyncio.to_thread(_do_request)
             except requests.exceptions.ReadTimeout as e:
                 if self.logger:
-                    self.logger.warning(f"[Invite] ulvis read timeout (attempt {attempt}/4): {e!r}")
+                    self.logger.warning(f"[Invite] ulvis read timeout (attempt {attempt}/3): {e!r}")
                 # Continue to next iteration after logging/backoff
                 # We need to explicitly continue here if an exception occurs
                 pass
             except requests.exceptions.RequestException as e:
                 if self.logger:
-                    self.logger.warning(f"[Invite] ulvis request failed (attempt {attempt}/4): {e!r}")
+                    self.logger.warning(f"[Invite] ulvis request failed (attempt {attempt}/3): {e!r}")
                 # Continue to next iteration after logging/backoff
                 pass
             except Exception as e:
                 if self.logger:
-                    self.logger.warning(f"[Invite] ulvis unexpected error (attempt {attempt}/4): {e!r}")
+                    self.logger.warning(f"[Invite] ulvis unexpected error (attempt {attempt}/3): {e!r}")
                 # Continue to next iteration after logging/backoff
                 pass
             else:
@@ -169,11 +169,49 @@ class AccountActions:
 
                 # Collision or API-level error (status 200, but success=False)
                 if self.logger:
-                    self.logger.info(f"[Invite] ulvis not success (attempt {attempt}/4): {payload!r}")
+                    self.logger.info(f"[Invite] ulvis not success (attempt {attempt}/3): {payload!r}")
 
             # small backoff/jitter before retry
             await asyncio.sleep(0.35 * attempt)
 
+        return ""
+
+    async def _isgd_short(self, long_url: str) -> str:
+        """Fallback shortener when ulvis is slow/unavailable.
+
+        is.gd provides a simple JSON API without needing authentication. We
+        keep this lean and synchronous inside a thread (just like ulvis) to
+        avoid blocking the event loop.
+        """
+        long_url = (long_url or "").strip()
+        if not long_url:
+            return ""
+
+        api_url = "https://is.gd/create.php"
+        params = {
+            "format": "json",
+            "url": long_url,
+            "logstats": "0",
+        }
+
+        def _do_request() -> dict:
+            r = requests.get(api_url, params=params, timeout=(4, 10))
+            r.raise_for_status()
+            return r.json()
+
+        try:
+            payload = await asyncio.to_thread(_do_request)
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"[Invite] is.gd shortener failed: {e!r}")
+            return ""
+
+        short_url = (payload.get("shorturl") or "").strip()
+        if short_url:
+            return short_url
+
+        if self.logger:
+            self.logger.info(f"[Invite] is.gd returned no short url: {payload!r}")
         return ""
 
 
@@ -195,7 +233,11 @@ class AccountActions:
             if existing:
                 return existing
 
+        # First preference: ulvis (one-time link). If it times out/fails, fall
+        # back to is.gd so the user still gets a usable short link quickly.
         short = await self._ulvis_one_time_short(long_invite)
+        if not short:
+            short = await self._isgd_short(long_invite)
         if not short:
             return long_invite
 
