@@ -101,9 +101,15 @@ class AccountActions:
         return {}
         
         
-    def _rand_alias(self, n: int = 4) -> str:
+    def _rand_alias(self, n: int = 10) -> str:
+        """Generate a random alias with a stable prefix so Ulvis accepts it.
+
+        The standalone test script that worked reliably used a prefixed alias
+        with ~10 random characters. We mirror that here to match the proven
+        behaviour.
+        """
         alphabet = string.ascii_letters + string.digits
-        return "".join(random.choice(alphabet) for _ in range(n))
+        return "oor" + "".join(random.choice(alphabet) for _ in range(n))
 
     async def _ulvis_one_time_short(self, long_url: str) -> str:
         """
@@ -117,10 +123,13 @@ class AccountActions:
 
         api_url = "https://ulvis.net/API/write/get"
 
-        # 3 attempts (shorter timeout to avoid long stalls when ulvis is slow)
-        for attempt in range(1, 4):
+        # Match the standalone script that behaved reliably: 5s connect, 20s
+        # read, and a prefixed alias with a bit more entropy. Allow up to five
+        # tries before falling back so transient slowness gets a chance to
+        # resolve without blocking forever.
+        for attempt in range(1, 6):
             # Generate a new alias for each attempt, in case of collision
-            alias = self._rand_alias(4)
+            alias = self._rand_alias()
 
             params = {
                 "url": long_url,
@@ -135,7 +144,7 @@ class AccountActions:
                 r = requests.get(
                     api_url,
                     params=params,
-                    timeout=(4, 10),
+                    timeout=(5, 20),
                     headers={"User-Agent": "oorbots/1.0"},
                 )
                 r.raise_for_status() # Raise exception for 4xx/5xx status codes
@@ -145,18 +154,18 @@ class AccountActions:
                 payload = await asyncio.to_thread(_do_request)
             except requests.exceptions.ReadTimeout as e:
                 if self.logger:
-                    self.logger.warning(f"[Invite] ulvis read timeout (attempt {attempt}/3): {e!r}")
+                    self.logger.warning(f"[Invite] ulvis read timeout (attempt {attempt}/5): {e!r}")
                 # Continue to next iteration after logging/backoff
                 # We need to explicitly continue here if an exception occurs
                 pass
             except requests.exceptions.RequestException as e:
                 if self.logger:
-                    self.logger.warning(f"[Invite] ulvis request failed (attempt {attempt}/3): {e!r}")
+                    self.logger.warning(f"[Invite] ulvis request failed (attempt {attempt}/5): {e!r}")
                 # Continue to next iteration after logging/backoff
                 pass
             except Exception as e:
                 if self.logger:
-                    self.logger.warning(f"[Invite] ulvis unexpected error (attempt {attempt}/3): {e!r}")
+                    self.logger.warning(f"[Invite] ulvis unexpected error (attempt {attempt}/5): {e!r}")
                 # Continue to next iteration after logging/backoff
                 pass
             else:
@@ -169,10 +178,10 @@ class AccountActions:
 
                 # Collision or API-level error (status 200, but success=False)
                 if self.logger:
-                    self.logger.info(f"[Invite] ulvis not success (attempt {attempt}/3): {payload!r}")
+                    self.logger.info(f"[Invite] ulvis not success (attempt {attempt}/5): {payload!r}")
 
             # small backoff/jitter before retry
-            await asyncio.sleep(0.35 * attempt)
+            await asyncio.sleep(0.5 * attempt)
 
         return ""
 
