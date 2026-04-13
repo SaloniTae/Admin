@@ -1,5 +1,8 @@
 pyrogram
+TgCrypto 
 aiohttp
-aiofiles
-aiohttp[speedups]
 requests
+Pillow
+qrcode-styled
+pytz
+psutil
