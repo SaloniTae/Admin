@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OOR Pay - Dev Workspace</title>
+    <style>
+        /* Fonts */
+        @font-face {
+            font-family: 'Montserrat';
+            src: url('https://font-public.canva.com/YAFdtQi73Xs/0/Montserrat-SemiBold.c9710b28cd6952581b6d.10bae089b2dee90878d1d146921cad11.woff2') format('woff2');
+            font-weight: 600;
+        }
+        @font-face {
+            font-family: 'CityLight';
+            src: url('https://font-public.canva.com/YAEzwDGHo5s/0/CityLight-Regular.2c9dcc876628037e980ebf.b68298bb97914881a3d1352f7c37b2cb.woff2') format('woff2');
+            font-weight: 400;
+        }
+
+        /* 1. GLOBAL VARIABLES (Desktop/Default Base - Over 480px) */
+        :root {
+            --page-max-width: 430px;
+            --logo-width: 120px;
+            --report-btn-font-size: 14px;
+            --report-btn-px: 18px; 
+            --report-btn-py: 6px;  
+            --report-btn-x: 0px;
+            --report-btn-y: 0px;
+
+            --middle-group-x: 0px;
+            --middle-group-y: 0px;
+            --bottom-group-x: 0px;
+            --bottom-group-y: 0px;
+            --bottom-group-y-scrolled: 0px; 
+            
+            --merchant-mt: 40px;
+            --merchant-font-size: 18px;
+            --verified-badge-width: 22px;
+            
+            --qr-mt: 32px;
+            --qr-max-width: 260px;
+            --qr-inner-scale: 72%;
+            --qr-glass-x: 0px;
+            --qr-glass-y: 0px;
+            --qr-code-x: 0px;
+            --qr-code-y: 0px;
+
+            --pay-via-mt: 32px;
+            --pay-via-width: 220px;
+            
+            --timer-max-width: 280px;
+            --timer-mb: 20px;
+            --timer-inset-top-bottom: 8px; 
+            --timer-inset-left-right: 8px; 
+            --timer-font-size: 30px;
+            --timer-glass-x: 0px;
+            --timer-glass-y: 0px;
+            --footer-mb: 24px;
+            --powered-by-height: 14px;
+        }
+
+        /* 2. MEDIUM MOBILE (Strictly between 421px and 480px - For 437px, 457px) */
+        @media screen and (min-width: 421px) and (max-width: 480px) {
+            :root {
+                --logo-width: 163px;
+                
+                --report-btn-font-size: 13px;
+                --report-btn-px: 16px;
+                --report-btn-py: 9px;
+                --report-btn-x: 0px;
+                --report-btn-y: -5px;
+
+                --middle-group-x: 0px;
+                --middle-group-y: -2px;
+                
+                --bottom-group-x: 0px;
+                --bottom-group-y: -37px;
+                --bottom-group-y-scrolled: -17px;
+                --powered-by-height: 21px;
+
+                --merchant-mt: 109px;
+                --merchant-font-size: 17px;
+                --verified-badge-width: 22px; 
+                
+                --qr-mt: 24px;
+                --qr-max-width: 262px;
+                --qr-inner-scale: 75%;
+                --qr-glass-x: 0px;
+                --qr-glass-y: 0px;
+                --qr-code-x: -3px;
+                --qr-code-y: -2px;
+
+                --pay-via-mt: 19px;
+                --pay-via-width: 211px;
+                
+                --timer-max-width: 361px;
+                --timer-glass-x: 3px;
+                --timer-glass-y: 0px;
+                --timer-inset-top-bottom: 14px;
+                --timer-inset-left-right: 15px;
+                --timer-font-size: 24px;
+            }
+        }
+
+        /* 3. SMALL MOBILE (Strictly 420px and below - For 392px, 420px) */
+        @media screen and (max-width: 420px) {
+            :root {
+                --logo-width: 140px;
+                
+                --report-btn-font-size: 12px;
+                --report-btn-px: 13px;
+                --report-btn-py: 8px;
+                --report-btn-x: 0px;
+                --report-btn-y: -4px;
+
+                --middle-group-x: 0px;
+                --middle-group-y: -18px;
+                
+                --bottom-group-x: 0px;
+                --bottom-group-y: -19px;
+                --bottom-group-y-scrolled: -16px;
+
+                --merchant-mt: 100px;
+                --merchant-font-size: 16px;
+                --verified-badge-width: 22px; 
+                
+                --qr-mt: 20px;
+                --qr-max-width: 231px;
+                --qr-inner-scale: 75%;
+                --qr-glass-x: 0px;
+                --qr-glass-y: 0px;
+                --qr-code-x: -2px;
+                --qr-code-y: -2px;
+
+                --pay-via-mt: 19px;
+                --pay-via-width: 197px;
+                
+                --timer-max-width: 329px;
+                --timer-glass-x: 3px;
+                --timer-glass-y: 0px;
+                --timer-inset-top-bottom: 13px;
+                --timer-inset-left-right: 12px;
+                --timer-font-size: 24px;
+                --powered-by-height: 18px;
+            }
+        }
+
+        /* Base Reset */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* ===================================================
+           ANTI-HIGHLIGHT & SECURITY SETTINGS
+           =================================================== */
+        body {
+            background-color: #000000;
+            color: #FFFFFF;
+            font-family: 'Montserrat', sans-serif;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            overflow-x: hidden; 
+            scroll-behavior: smooth;
+            -webkit-tap-highlight-color: transparent; 
+        }
+
+        .app-canvas {
+            width: 100%;
+            max-width: var(--page-max-width);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 0 32px;
+            position: relative;
+            margin: 0 auto;
+            -webkit-touch-callout: none; 
+            -webkit-user-select: none; 
+            user-select: none;
+        }
+
+        .app-canvas img {
+            pointer-events: none; 
+            -webkit-user-drag: none; 
+            user-drag: none;
+        }
+
+        /* Header */
+        .navbar { padding-top: 32px; height: 80px; display: flex; justify-content: space-between; align-items: center; }
+        .logo-img { width: var(--logo-width); height: auto; }
+        
+        .btn-report { 
+            font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: var(--report-btn-font-size); 
+            color: #E8352A; background: transparent; border: 1.5px solid #E8352A; border-radius: 999px; 
+            padding: var(--report-btn-py) var(--report-btn-px); transform: translate(var(--report-btn-x), var(--report-btn-y));
+            cursor: pointer; pointer-events: auto; outline: none; transition: background 0.2s;
+        }
+        .btn-report:active { background: rgba(232, 53, 42, 0.1); }
+        
+        /* === MIDDLE GROUP CONTAINER === */
+        .middle-container { width: 100%; transform: translate(var(--middle-group-x), var(--middle-group-y)); }
+        .merchant-row { margin-top: var(--merchant-mt); display: flex; justify-content: center; align-items: center; gap: 8px; }
+        .merchant-name { font-size: var(--merchant-font-size); text-align: center; }
+        .verified-badge { width: var(--verified-badge-width); height: auto; }
+        
+        /* QR Section */
+        .qr-section { margin: var(--qr-mt) auto 0 auto; width: 100%; max-width: var(--qr-max-width); position: relative; display: flex; justify-content: center; align-items: center; }
+        .qr-glass { width: 100%; height: auto; display: block; z-index: 2; margin: 0 auto; transform: translate(var(--qr-glass-x), var(--qr-glass-y)); }
+        .qr-code { position: absolute; top: 50%; left: 50%; transform: translate(calc(-50% + var(--qr-code-x)), calc(-50% + var(--qr-code-y))); width: var(--qr-inner-scale); z-index: 1; }
+        
+        .pay-via-section { margin-top: var(--pay-via-mt); display: flex; justify-content: center; align-items: center; width: 100%; }
+        .pay-via-img { width: var(--pay-via-width); height: auto; margin: 0 auto; display: block; }
+        
+        .spacer { flex-grow: 1; min-height: 140px; }
+
+        /* === BOTTOM GROUP CONTAINER (Floating & Sticky) === */
+        .bottom-container { 
+            width: 100%; position: sticky; bottom: 0; z-index: 50;
+            transform: translate(var(--bottom-group-x), var(--bottom-group-y)); 
+            transition: transform 0.65s cubic-bezier(0.25, 1, 0.35, 1);
+        }
+        .is-scrolled .bottom-container { transform: translate(var(--bottom-group-x), var(--bottom-group-y-scrolled)); }
+
+        .timer-section { width: 100%; max-width: var(--timer-max-width); margin: 0 auto var(--timer-mb) auto; position: relative; display: flex; justify-content: center; align-items: center; }
+        .timer-inner-pill { position: absolute; top: var(--timer-inset-top-bottom); bottom: var(--timer-inset-top-bottom); left: var(--timer-inset-left-right); right: var(--timer-inset-left-right); background-color: #FFFFFF; border-radius: 999px; z-index: 1; }
+        .timer-glass { width: 100%; height: auto; display: block; position: relative; z-index: 2; margin: 0 auto; transform: translate(var(--timer-glass-x), var(--timer-glass-y)); }
+        .timer-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'CityLight', sans-serif; font-size: var(--timer-font-size); color: #111111; letter-spacing: 0.05em; z-index: 3; text-align: center; width: 100%; pointer-events: none; }
+        .footer { margin-bottom: var(--footer-mb); display: flex; justify-content: center; align-items: center; width: 100%; }
+        .powered-by-img { height: var(--powered-by-height); width: auto; margin: 0 auto; display: block; }
+
+        /* ===================================================
+           REPORT MODAL & TOAST UI
+           =================================================== */
+        #report-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            z-index: 100000; display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px;
+        }
+        #report-overlay.active { opacity: 1; pointer-events: auto; }
+
+        .report-modal {
+            background: #161616; border: 1px solid #333; border-radius: 20px;
+            width: 100%; max-width: 400px; padding: 28px 24px; position: relative;
+            box-shadow: 0 24px 48px rgba(0,0,0,0.8);
+            transform: translateY(20px) scale(0.95); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        #report-overlay.active .report-modal { transform: translateY(0) scale(1); }
+
+        .btn-close-modal {
+            position: absolute; top: 16px; right: 16px; background: rgba(255,255,255,0.1); border: none;
+            color: #fff; width: 32px; height: 32px; border-radius: 50%; font-size: 18px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: background 0.2s;
+        }
+        .btn-close-modal:active { background: rgba(255,255,255,0.2); }
+
+        .report-modal h2 { font-size: 20px; margin-bottom: 16px; color: #fff; text-align: center; }
+
+        /* Yellow Warning Alert */
+        .report-alert {
+            background: rgba(250, 204, 21, 0.1); border-left: 4px solid #FACC15;
+            padding: 12px 16px; border-radius: 4px 8px 8px 4px; font-size: 12px; color: #FEF08A;
+            margin-bottom: 20px; line-height: 1.5; font-weight: 500;
+        }
+
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 12px; color: #aaa; margin-bottom: 6px; font-weight: 600; }
+        
+        .form-control {
+            width: 100%; background: #222; border: 1px solid #333; color: #fff;
+            padding: 12px 14px; border-radius: 12px; font-family: 'Montserrat', sans-serif;
+            font-size: 14px; outline: none; transition: border-color 0.2s;
+        }
+        .form-control:focus { border-color: #666; }
+        .form-control[readonly] { background: #1a1a1a; color: #777; cursor: not-allowed; }
+        textarea.form-control { resize: none; height: 80px; }
+        
+        input[type="file"].form-control { padding: 10px; font-size: 12px; color: #aaa; }
+        input[type="file"]::file-selector-button {
+            background: #333; color: #fff; border: none; padding: 6px 12px; border-radius: 6px;
+            margin-right: 12px; cursor: pointer; font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 11px;
+        }
+
+        /* White Submit Button */
+        .btn-submit {
+            width: 100%; background: #FFFFFF; color: #000000; border: none; padding: 14px;
+            border-radius: 12px; font-family: 'Montserrat', sans-serif; font-weight: 700;
+            font-size: 15px; cursor: pointer; margin-top: 8px; transition: transform 0.1s, opacity 0.2s;
+        }
+        .btn-submit:active { transform: scale(0.98); opacity: 0.9; }
+        .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: scale(1); }
+
+        /* Sleek Centered Animated Toast */
+        #toast {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.85);
+            background: rgba(26, 26, 26, 0.9); color: #fff; padding: 16px 32px; border-radius: 999px;
+            font-size: 14px; font-family: 'Montserrat', sans-serif; font-weight: 600;
+            border: 1px solid rgba(255, 255, 255, 0.15); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            z-index: 1000000; transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+            pointer-events: none; box-shadow: 0 16px 40px rgba(0,0,0,0.8);
+            display: flex; align-items: center; justify-content: center; white-space: nowrap;
+            opacity: 0; visibility: hidden;
+        }
+        #toast.show { transform: translate(-50%, -50%) scale(1); opacity: 1; visibility: visible; }
+
+        /* ===================================================
+           FLOATING DRAGGABLE DEV PANEL
+           =================================================== */
+        #dev-panel {
+            position: fixed; top: 30px; left: 20px; width: 320px; height: 460px;
+            background: rgba(25, 25, 25, 0.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            color: #fff; font-family: sans-serif; font-size: 13px;
+            border: 1px solid #444; border-radius: 12px; z-index: 10000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8); display: flex; flex-direction: column; overflow: hidden;
+            pointer-events: auto; -webkit-user-select: auto; user-select: auto;
+        }
+
+        #dev-header { background: #E8352A; color: white; padding: 12px; text-align: center; font-weight: bold; font-size: 15px; cursor: grab; user-select: none; display: flex; justify-content: space-between; align-items: center; }
+        #dev-header:active { cursor: grabbing; }
+        .dev-btn-group { display: flex; gap: 8px; }
+        .dev-btn { background: rgba(0,0,0,0.3); border: none; color: white; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        #controls-container { padding: 15px; overflow-y: auto; flex-grow: 1; padding-bottom: 40px; }
+        #dev-panel.minimized { height: auto; }
+        #dev-panel.minimized #controls-container { display: none; }
+        .control-group { margin-bottom: 15px; padding: 12px; background: rgba(255, 255, 255, 0.05); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
+        .control-group label { display: flex; justify-content: space-between; margin-bottom: 12px; font-weight: bold; color: #fff; text-transform: capitalize; }
+        .control-group input[type="range"] { width: 100%; cursor: pointer; height: 20px; }
+        .control-group span { color: #aaa; font-weight: normal; }
+
+        /* Viewport HUD */
+        #viewport-hud { position: fixed; top: 0; left: 0; background: #E8352A; color: #FFF; padding: 4px 8px; font-family: monospace; font-size: 11px; font-weight: bold; z-index: 999999; border-bottom-right-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.5); pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <div id="viewport-hud">CSS Width: 0px</div>
+    <div id="toast">Report submitted successfully.</div>
+
+    <div class="app-canvas">
+        <header class="navbar">
+            <img src="https://gist.githack.com/OTTONRENT01/a8c8a6722574f5a64cc6d429768d8bdd/raw/8b6d145efd5b1ad03e697a693f2d2a4e0a7000c7/OORPay.svg" alt="OOR Pay" class="logo-img">
+            <button class="btn-report" onclick="openReportModal()">Report</button>
+        </header>
+
+        <div class="middle-container">
+            <div class="merchant-row">
+                <span class="merchant-name" id="display-merchant-name">Fayedekideal</span>
+                <img src="https://gist.githack.com/OTTONRENT01/a8c8a6722574f5a64cc6d429768d8bdd/raw/8b6d145efd5b1ad03e697a693f2d2a4e0a7000c7/Verified.svg" alt="Verified" class="verified-badge">
+            </div>
+            <div class="qr-section">
+                <img src="https://gist.githack.com/OTTONRENT01/a8c8a6722574f5a64cc6d429768d8bdd/raw/8b6d145efd5b1ad03e697a693f2d2a4e0a7000c7/QR-Glass.svg" class="qr-glass" alt="QR Background">
+                <img src="https://gist.githack.com/OTTONRENT01/a8c8a6722574f5a64cc6d429768d8bdd/raw/8b6d145efd5b1ad03e697a693f2d2a4e0a7000c7/QR.svg" class="qr-code" alt="QR Code">
+            </div>
+            <div class="pay-via-section">
+                <img src="https://gist.githack.com/OTTONRENT01/a8c8a6722574f5a64cc6d429768d8bdd/raw/8b6d145efd5b1ad03e697a693f2d2a4e0a7000c7/Pay-via.svg" class="pay-via-img" alt="Pay via any UPI app">
+            </div>
+        </div>
+
+        <div class="spacer"></div>
+
+        <div class="bottom-container">
+            <div class="timer-section">
+                <div class="timer-inner-pill"></div>
+                <img src="https://gist.githack.com/OTTONRENT01/a8c8a6722574f5a64cc6d429768d8bdd/raw/8b6d145efd5b1ad03e697a693f2d2a4e0a7000c7/Button-Glass.svg" class="timer-glass" alt="Timer Button Bezel">
+                <div class="timer-text" id="countdown-timer">04 : 58</div>
+            </div>
+            <footer class="footer">
+                <img src="https://gist.githack.com/OTTONRENT01/a8c8a6722574f5a64cc6d429768d8bdd/raw/8b6d145efd5b1ad03e697a693f2d2a4e0a7000c7/Powered-by.svg" class="powered-by-img" alt="Powered by OOR Pay">
+            </footer>
+        </div>
+    </div>
+
+    <div id="report-overlay">
+        <div class="report-modal">
+            <button class="btn-close-modal" onclick="closeReportModal()">×</button>
+            <h2>Report Merchant</h2>
+            
+            <div class="report-alert">
+                We apologise, it's not possible for us to refund your money from the merchant directly, but we can ban the merchant so they can't scam others.
+            </div>
+
+            <form id="report-form" onsubmit="submitReport(event)">
+                <div class="form-group">
+                    <label>Merchant Name</label>
+                    <input type="text" class="form-control" id="form-merchant-name" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Your Name</label>
+                    <input type="text" class="form-control" id="form-user-name" placeholder="John Doe" required>
+                </div>
+                <div class="form-group">
+                    <label>Your Contact Details (Optional)</label>
+                    <input type="text" class="form-control" id="form-contact" placeholder="WhatsApp/Email/Telegram">
+                </div>
+                <div class="form-group">
+                    <label>Issue Details</label>
+                    <textarea class="form-control" id="form-message" placeholder="Describe the scam or issue..." required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Evidence</label>
+                    <input type="file" class="form-control" id="form-file" accept="image/*,video/*" multiple required>
+                </div>
+                
+                <button type="submit" class="btn-submit" id="btn-submit-report">Submit Report</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="dev-panel">
+        <div id="dev-header">
+            <span>✥ Drag Me (Sizes)</span>
+            <div class="dev-btn-group">
+                <button class="dev-btn" onclick="resetStyles()">⟲ Reset</button>
+                <button class="dev-btn" onclick="toggleMinimize()">—</button>
+            </div>
+        </div>
+        <div id="controls-container"></div>
+    </div>
+
+    <script>
+        // === REPORT MODAL & API LOGIC ===
+        const reportOverlay = document.getElementById('report-overlay');
+        const merchantNameDisplay = document.getElementById('display-merchant-name');
+        const merchantInput = document.getElementById('form-merchant-name');
+        const submitBtn = document.getElementById('btn-submit-report');
+
+        function openReportModal() {
+            merchantInput.value = merchantNameDisplay.innerText;
+            reportOverlay.classList.add('active');
+        }
+
+        function closeReportModal() {
+            reportOverlay.classList.remove('active');
+        }
+
+        reportOverlay.addEventListener('click', (e) => {
+            if(e.target === reportOverlay) closeReportModal();
+        });
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.classList.add('show');
+            setTimeout(() => { toast.classList.remove('show'); }, 3000);
+        }
+
+        async function submitReport(e) {
+            e.preventDefault();
+            
+            submitBtn.disabled = true;
+            submitBtn.innerText = "Submitting...";
+
+            const userName = document.getElementById('form-user-name').value;
+            const userContact = document.getElementById('form-contact').value.trim() || 'Not provided';
+            const userMessage = document.getElementById('form-message').value;
+            const fileInput = document.getElementById('form-file');
+
+            const combinedMessage = `[User Contact: ${userContact}]\n\n${userMessage}`;
+
+            const fd = new FormData();
+            fd.append("merchant_name", merchantInput.value); 
+            fd.append("name", userName);
+            fd.append("message", combinedMessage);
+            
+            // Loop through selected multiple files and append them
+            if(fileInput.files.length > 0) {
+                for (let i = 0; i < fileInput.files.length; i++) {
+                    fd.append("media_file", fileInput.files[i]);
+                }
+            }
+
+            try {
+                await fetch("https://report-oorpay.by-oor.workers.dev/", {
+                    method: "POST",
+                    body: fd,
+                });
+                
+                closeReportModal();
+                document.getElementById('report-form').reset();
+                showToast("Report submitted successfully.");
+
+            } catch (err) {
+                console.error("Submission failed", err);
+                alert("Failed to submit report. Please try again.");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Report";
+            }
+        }
+
+        // === SMOOTH SCROLL EVENT LISTENER ===
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 15) {
+                document.documentElement.classList.add('is-scrolled');
+            } else {
+                document.documentElement.classList.remove('is-scrolled');
+            }
+        }, { passive: true });
+
+        // === DEV PANEL LOGIC ===
+        function updateHUD() { document.getElementById('viewport-hud').innerText = `CSS Width: ${window.innerWidth}px`; }
+        window.addEventListener('resize', updateHUD);
+        updateHUD();
+
+        const cssVars = [
+            { name: '--middle-group-x', min: -100, max: 100, unit: 'px' }, { name: '--middle-group-y', min: -200, max: 200, unit: 'px' },
+            { name: '--bottom-group-x', min: -100, max: 100, unit: 'px' }, { name: '--bottom-group-y', min: -200, max: 200, unit: 'px' },
+            { name: '--bottom-group-y-scrolled', min: -200, max: 200, unit: 'px' },
+            { name: '--logo-width', min: 60, max: 200, unit: 'px' },
+            { name: '--report-btn-font-size', min: 10, max: 24, unit: 'px' },
+            { name: '--report-btn-px', min: 0, max: 50, unit: 'px' }, { name: '--report-btn-py', min: 0, max: 30, unit: 'px' },
+            { name: '--report-btn-x', min: -100, max: 100, unit: 'px' }, { name: '--report-btn-y', min: -100, max: 100, unit: 'px' },
+            { name: '--merchant-mt', min: 0, max: 150, unit: 'px' }, { name: '--merchant-font-size', min: 12, max: 32, unit: 'px' },
+            { name: '--qr-mt', min: 0, max: 100, unit: 'px' }, { name: '--qr-max-width', min: 150, max: 350, unit: 'px' },
+            { name: '--qr-inner-scale', min: 50, max: 100, unit: '%' },
+            { name: '--qr-glass-x', min: -100, max: 100, unit: 'px' }, { name: '--qr-glass-y', min: -100, max: 100, unit: 'px' },
+            { name: '--qr-code-x', min: -100, max: 100, unit: 'px' }, { name: '--qr-code-y', min: -100, max: 100, unit: 'px' },
+            { name: '--pay-via-mt', min: 0, max: 100, unit: 'px' }, { name: '--pay-via-width', min: 100, max: 350, unit: 'px' },
+            { name: '--timer-max-width', min: 150, max: 400, unit: 'px' },
+            { name: '--timer-glass-x', min: -50, max: 50, unit: 'px' }, { name: '--timer-glass-y', min: -50, max: 50, unit: 'px' },
+            { name: '--timer-inset-top-bottom', min: 0, max: 30, unit: 'px' }, { name: '--timer-inset-left-right', min: 0, max: 30, unit: 'px' },
+            { name: '--timer-font-size', min: 16, max: 50, unit: 'px' }, { name: '--powered-by-height', min: 8, max: 30, unit: 'px' }
+        ];
+
+        const container = document.getElementById('controls-container');
+        
+        function initSliders() {
+            container.innerHTML = '';
+            const computedStyle = getComputedStyle(document.documentElement);
+            cssVars.forEach(v => {
+                const group = document.createElement('div');
+                group.className = 'control-group';
+                let displayName = v.name.replace('--', '').replace(/-/g, ' ');
+                let rawValue = computedStyle.getPropertyValue(v.name).trim();
+                let numValue = rawValue ? parseFloat(rawValue) : 0; 
+                group.innerHTML = `
+                    <label>${displayName} <span id="${v.name}-val">${numValue}${v.unit}</span></label>
+                    <input type="range" id="${v.name}-slider" min="${v.min}" max="${v.max}" value="${numValue}" 
+                           oninput="updateVar('${v.name}', this.value, '${v.unit}')">
+                `;
+                container.appendChild(group);
+            });
+        }
+
+        function updateVar(name, val, unit) {
+            document.documentElement.style.setProperty(name, val + unit);
+            document.getElementById(name + '-val').innerText = val + unit;
+        }
+
+        function resetStyles() { document.documentElement.style = ''; initSliders(); }
+        window.addEventListener('load', initSliders);
+        window.addEventListener('resize', () => { if(document.documentElement.style.length === 0) initSliders(); });
+        function toggleMinimize() { document.getElementById('dev-panel').classList.toggle('minimized'); }
+
+        // --- DRAG LOGIC ---
+        const devPanel = document.getElementById('dev-panel');
+        const devHeader = document.getElementById('dev-header');
+        let isDragging = false, startX, startY, initialX, initialY;
+        function startDrag(e) {
+            if(e.target.tagName === 'BUTTON') return; 
+            isDragging = true;
+            const event = e.type.includes('mouse') ? e : e.touches[0];
+            startX = event.clientX; startY = event.clientY;
+            const rect = devPanel.getBoundingClientRect();
+            initialX = rect.left; initialY = rect.top;
+        }
+        function drag(e) {
+            if (!isDragging) return;
+            e.preventDefault(); 
+            const event = e.type.includes('mouse') ? e : e.touches[0];
+            const dx = event.clientX - startX; const dy = event.clientY - startY;
+            devPanel.style.left = `${initialX + dx}px`; devPanel.style.top = `${initialY + dy}px`;
+            devPanel.style.bottom = 'auto'; devPanel.style.right = 'auto'; 
+        }
+        function endDrag() { isDragging = false; }
+        devHeader.addEventListener('mousedown', startDrag); devHeader.addEventListener('touchstart', startDrag, {passive: false});
+        document.addEventListener('mousemove', drag, {passive: false}); document.addEventListener('touchmove', drag, {passive: false});
+        document.addEventListener('mouseup', endDrag); document.addEventListener('touchend', endDrag);
+
+        // --- TIMER LOGIC ---
+        const timerDisplay = document.getElementById('countdown-timer');
+        let timeLeft = (4 * 60) + 58;
+        setInterval(() => {
+            if (timeLeft <= 0) return;
+            const m = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+            const s = String(timeLeft % 60).padStart(2, '0');
+            timerDisplay.textContent = `${m} : ${s}`;
+            timeLeft--;
+        }, 1000);
+    </script>
+</body>
+</html>
