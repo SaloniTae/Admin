@@ -65,9 +65,10 @@
             --powered-by-height: 14px;
         }
 
-        /* CHANGED: Apply font baseline patch strictly for Apple iOS devices */
+        /* Apply font baseline patch strictly for Apple iOS devices */
         html.is-ios {
-            --timer-text-y: -3px;
+            /* CHANGED: Adjusted to -5px */
+            --timer-text-y: -5px; 
         }
 
         /* 2. MEDIUM MOBILE (421px - 480px) */
@@ -81,11 +82,12 @@
                 --report-btn-y: -5px;
 
                 --middle-group-x: 0px;
-                /* CHANGED: Updated Middle Group Y for this specific range */
-                --middle-group-y: -17px; 
+                /* CHANGED: -32px for this range */
+                --middle-group-y: -32px; 
                 
                 --bottom-group-x: 0px;
-                --bottom-group-y: 0px;
+                /* CHANGED: -36px */
+                --bottom-group-y: -36px;
                 
                 --powered-by-height: 21px;
                 --merchant-mt: 109px;
@@ -112,7 +114,7 @@
             }
         }
 
-        /* 3. SMALL MOBILE */
+        /* 3. SMALL MOBILE (Max 420px - Specifically Android 392px range) */
         @media screen and (max-width: 420px) {
             :root {
                 --logo-width: 140px;
@@ -125,7 +127,8 @@
                 --middle-group-x: 0px;
                 --middle-group-y: -18px;
                 --bottom-group-x: 0px;
-                --bottom-group-y: 0px;
+                /* CHANGED: -36px */
+                --bottom-group-y: -36px;
 
                 --merchant-mt: 100px;
                 --merchant-font-size: 16px;
@@ -142,7 +145,9 @@
                 --pay-via-mt: 19px;
                 --pay-via-width: 197px;
                 
-                --timer-max-width: 329px;
+                /* CHANGED: 311px for 392px Android range */
+                --timer-max-width: 311px;
+                
                 --timer-glass-x: 3px;
                 --timer-glass-y: 0px;
                 --timer-inset-top-bottom: 13px;
@@ -152,7 +157,7 @@
             }
         }
 
-        /* 4. EXTRA SMALL MOBILE */
+        /* 4. EXTRA SMALL MOBILE (Max 395px) */
         @media screen and (max-width: 395px) {
             :root {
                 --logo-width: 125px;
@@ -162,7 +167,8 @@
                 --report-btn-y: 0px;
 
                 --middle-group-y: -10px;
-                --bottom-group-y: 0px;
+                /* CHANGED: -36px applied to all sub-480 ranges */
+                --bottom-group-y: -36px;
 
                 --merchant-mt: 60px;
                 --merchant-font-size: 15px;
@@ -300,7 +306,6 @@
         #toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.85); background: rgba(26, 26, 26, 0.9); color: #fff; padding: 16px 32px; border-radius: 999px; font-size: 14px; font-family: 'Montserrat', sans-serif; font-weight: 600; border: 1px solid rgba(255, 255, 255, 0.15); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 1000000; transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); pointer-events: none; box-shadow: 0 16px 40px rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; white-space: nowrap; opacity: 0; visibility: hidden; }
         #toast.show { transform: translate(-50%, -50%) scale(1); opacity: 1; visibility: visible; }
         
-        /* Keep Dev Panel hidden in absolute production, but left here for your testing */
         #dev-panel { position: fixed; top: 30px; left: 20px; width: 320px; height: 460px; background: rgba(25, 25, 25, 0.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: #fff; font-family: sans-serif; font-size: 13px; border: 1px solid #444; border-radius: 12px; z-index: 10000; box-shadow: 0 10px 30px rgba(0,0,0,0.8); display: flex; flex-direction: column; overflow: hidden; pointer-events: auto; -webkit-user-select: auto; user-select: auto; }
         #dev-header { background: #E8352A; color: white; padding: 12px; text-align: center; font-weight: bold; font-size: 15px; cursor: grab; user-select: none; display: flex; justify-content: space-between; align-items: center; }
         #dev-header:active { cursor: grabbing; }
@@ -383,15 +388,11 @@
     </div>
 
     <script>
-        // ==========================================
-        // CHANGED: PRODUCTION IOS DETECTION
-        // ==========================================
-        // Reliably detects iPhone, old iPads, and new iPads requesting Desktop Sites
+        // PRODUCTION IOS DETECTION
         const isIOS = [
             'iPad Simulator', 'iPhone Simulator', 'iPod Simulator',
             'iPad', 'iPhone', 'iPod'
         ].includes(navigator.platform)
-        // iPad on iOS 13+ detection
         || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
 
         if (isIOS) {
