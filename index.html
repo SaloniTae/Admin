@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>OOR Pay - Dev Workspace</title>
     <style>
         /* Fonts */
@@ -17,8 +17,10 @@
             font-weight: 400;
         }
 
-        /* 1. GLOBAL VARIABLES (Desktop/Default Base - Over 480px) */
+        /* 1. GLOBAL VARIABLES */
         :root {
+            --app-height: 100vh; /* Fallback until JS takes over */
+            
             --page-max-width: 430px;
             --logo-width: 120px;
             --report-btn-font-size: 14px;
@@ -31,7 +33,6 @@
             --middle-group-y: 0px;
             --bottom-group-x: 0px;
             --bottom-group-y: 0px;
-            --bottom-group-y-scrolled: 0px; 
             
             --merchant-mt: 40px;
             --merchant-font-size: 18px;
@@ -61,11 +62,10 @@
             --powered-by-height: 14px;
         }
 
-        /* 2. MEDIUM MOBILE (Strictly between 421px and 480px) */
+        /* 2. MEDIUM MOBILE */
         @media screen and (min-width: 421px) and (max-width: 480px) {
             :root {
                 --logo-width: 163px;
-                
                 --report-btn-font-size: 13px;
                 --report-btn-px: 16px;
                 --report-btn-py: 9px;
@@ -75,13 +75,10 @@
                 --middle-group-x: 0px;
                 --middle-group-y: -2px;
                 
-                /* CHANGED: Fixed iOS Overlap Bug (Was -37px) */
                 --bottom-group-x: 0px;
                 --bottom-group-y: 0px;
-                --bottom-group-y-scrolled: 0px;
                 
                 --powered-by-height: 21px;
-
                 --merchant-mt: 109px;
                 --merchant-font-size: 17px;
                 --verified-badge-width: 22px; 
@@ -106,11 +103,10 @@
             }
         }
 
-        /* 3. SMALL MOBILE (Strictly 420px and below) */
+        /* 3. SMALL MOBILE */
         @media screen and (max-width: 420px) {
             :root {
                 --logo-width: 140px;
-                
                 --report-btn-font-size: 12px;
                 --report-btn-px: 13px;
                 --report-btn-py: 8px;
@@ -119,11 +115,8 @@
 
                 --middle-group-x: 0px;
                 --middle-group-y: -18px;
-                
-                /* CHANGED: Fixed iOS Overlap Bug */
                 --bottom-group-x: 0px;
                 --bottom-group-y: 0px;
-                --bottom-group-y-scrolled: 0px;
 
                 --merchant-mt: 100px;
                 --merchant-font-size: 16px;
@@ -150,21 +143,17 @@
             }
         }
 
-        /* 4. EXTRA SMALL MOBILE (Specifically for 350px - 395px devices) */
+        /* 4. EXTRA SMALL MOBILE */
         @media screen and (max-width: 395px) {
             :root {
                 --logo-width: 125px;
-                
                 --report-btn-font-size: 11px;
                 --report-btn-px: 12px;
                 --report-btn-py: 7px;
                 --report-btn-y: 0px;
 
                 --middle-group-y: -10px;
-                
-                /* CHANGED: Fixed iOS Overlap Bug */
                 --bottom-group-y: 0px;
-                --bottom-group-y-scrolled: 0px;
 
                 --merchant-mt: 60px;
                 --merchant-font-size: 15px;
@@ -185,38 +174,33 @@
                 --timer-font-size: 22px;
                 --powered-by-height: 16px;
             }
-            
-            .app-canvas {
-                padding: 0 20px;
-            }
+            .app-canvas { padding: 0 20px; }
         }
 
-        /* Base Reset */
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        /* ===================================================
-           ANTI-HIGHLIGHT & SECURITY SETTINGS
-           =================================================== */
+        /* CHANGED: Forceful rigid body lock */
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden; /* Stops native scrolling */
+            overscroll-behavior-y: none; /* Stops iOS rubber-banding */
+        }
+
         body {
             background-color: #000000;
             color: #FFFFFF;
             font-family: 'Montserrat', sans-serif;
             display: flex;
             justify-content: center;
-            /* CHANGED: Added fallback for old iOS Safari before dvh */
-            min-height: 100vh; 
-            min-height: 100dvh; 
-            overflow-x: hidden; 
-            scroll-behavior: smooth;
             -webkit-tap-highlight-color: transparent; 
         }
 
+        /* CHANGED: Binds directly to the JS calculated height */
         .app-canvas {
             width: 100%;
             max-width: var(--page-max-width);
-            /* CHANGED: Added fallback for old iOS Safari before dvh */
-            min-height: 100vh; 
-            min-height: 100dvh; 
+            height: var(--app-height); 
             display: flex;
             flex-direction: column;
             padding: 0 32px;
@@ -225,6 +209,8 @@
             -webkit-touch-callout: none; 
             -webkit-user-select: none; 
             user-select: none;
+            overflow-y: auto; /* Allow internal scrolling if content is huge */
+            overscroll-behavior-y: contain;
         }
 
         .app-canvas img {
@@ -233,8 +219,7 @@
             user-drag: none;
         }
 
-        /* Header */
-        .navbar { padding-top: 32px; height: 80px; display: flex; justify-content: space-between; align-items: center; }
+        .navbar { padding-top: 32px; height: 80px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
         .logo-img { width: var(--logo-width); height: auto; }
         
         .btn-report { 
@@ -245,170 +230,74 @@
         }
         .btn-report:active { background: rgba(232, 53, 42, 0.1); }
         
-        /* === MIDDLE GROUP CONTAINER === */
-        .middle-container { width: 100%; transform: translate(var(--middle-group-x), var(--middle-group-y)); }
+        .middle-container { width: 100%; transform: translate(var(--middle-group-x), var(--middle-group-y)); flex-shrink: 0; }
         .merchant-row { margin-top: var(--merchant-mt); display: flex; justify-content: center; align-items: center; gap: 8px; }
         .merchant-name { font-size: var(--merchant-font-size); text-align: center; }
         .verified-badge { width: var(--verified-badge-width); height: auto; }
         
-        /* QR Section */
         .qr-section { margin: var(--qr-mt) auto 0 auto; width: 100%; max-width: var(--qr-max-width); position: relative; display: flex; justify-content: center; align-items: center; }
         .qr-glass { width: 100%; height: auto; display: block; z-index: 2; margin: 0 auto; transform: translate(var(--qr-glass-x), var(--qr-glass-y)); }
         .qr-code { position: absolute; top: 50%; left: 50%; transform: translate(calc(-50% + var(--qr-code-x)), calc(-50% + var(--qr-code-y))); width: var(--qr-inner-scale); z-index: 1; }
         
-        /* Pay Via Section */
-        .pay-via-section { 
-            margin-top: var(--pay-via-mt); 
-            display: flex; 
-            flex-direction: column; 
-            justify-content: center; 
-            align-items: center; 
-            width: 100%; 
-        }
-        .pay-via-img { 
-            width: var(--pay-via-width); 
-            height: auto; 
-            margin: 0 auto; 
-            display: block; 
-            transform: translateX(var(--pay-via-x)); 
-        }
+        .pay-via-section { margin-top: var(--pay-via-mt); display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; }
+        .pay-via-img { width: var(--pay-via-width); height: auto; margin: 0 auto; display: block; transform: translateX(var(--pay-via-x)); }
         
-        .spacer { flex-grow: 1; min-height: 140px; }
+        /* CHANGED: Spring-loaded spacer. This pushes the bottom container down physically */
+        .spacer { 
+            flex-grow: 1; 
+            min-height: 20px; 
+        }
 
-        /* === BOTTOM GROUP CONTAINER === */
+        /* CHANGED: Removed buggy sticky positioning. Now relies purely on Flexbox pushing it to the floor */
         .bottom-container { 
             width: 100%; 
-            /* CHANGED: Bulletproof Safari Sticky */
-            position: -webkit-sticky;
-            position: sticky; 
-            bottom: env(safe-area-inset-bottom, 0px); 
+            margin-top: auto; 
             z-index: 50;
             transform: translate(var(--bottom-group-x), var(--bottom-group-y)); 
-            transition: transform 0.65s cubic-bezier(0.25, 1, 0.35, 1);
-            padding-bottom: env(safe-area-inset-bottom, 0px); 
+            padding-bottom: env(safe-area-inset-bottom, 20px); 
+            flex-shrink: 0;
         }
-        .is-scrolled .bottom-container { transform: translate(var(--bottom-group-x), var(--bottom-group-y-scrolled)); }
 
         .timer-section { width: 100%; max-width: var(--timer-max-width); margin: 0 auto var(--timer-mb) auto; position: relative; display: flex; justify-content: center; align-items: center; }
-        
         .timer-inner-pill { position: absolute; top: var(--timer-inset-top-bottom); bottom: var(--timer-inset-top-bottom); left: var(--timer-inset-left-right); right: var(--timer-inset-left-right); background-color: #FFFFFF; border-radius: 999px; z-index: 1; }
-        
         .timer-glass { width: 100%; height: auto; display: block; position: relative; z-index: 2; margin: 0 auto; transform: translate(var(--timer-glass-x), var(--timer-glass-y)); }
         
-        /* CHANGED: Bulletproof iOS Safari Flex Centering */
         .timer-text { 
-            position: absolute; 
-            top: 0;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            width: 100%;
-            height: 100%;
-            display: -webkit-box;
-            display: -webkit-flex;
-            display: flex; 
-            -webkit-box-pack: center;
-            -webkit-justify-content: center;
-            justify-content: center; 
-            -webkit-box-align: center;
-            -webkit-align-items: center;
-            align-items: center; 
-            font-family: 'CityLight', sans-serif; 
-            font-size: var(--timer-font-size); 
-            color: #111111; 
-            letter-spacing: 0.05em; 
-            z-index: 3; 
-            pointer-events: none; 
-            line-height: 1; 
+            position: absolute; top: 0; bottom: 0; left: 0; right: 0; width: 100%; height: 100%;
+            display: -webkit-box; display: -webkit-flex; display: flex; 
+            -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; 
+            -webkit-box-align: center; -webkit-align-items: center; align-items: center; 
+            font-family: 'CityLight', sans-serif; font-size: var(--timer-font-size); color: #111111; 
+            letter-spacing: 0.05em; z-index: 3; pointer-events: none; line-height: 1; 
             transform: translateY(var(--timer-text-y));
         }
 
         .footer { margin-bottom: var(--footer-mb); display: flex; justify-content: center; align-items: center; width: 100%; }
         .powered-by-img { height: var(--powered-by-height); width: auto; margin: 0 auto; display: block; }
 
-        /* ===================================================
-           REPORT MODAL & TOAST UI
-           =================================================== */
-        #report-overlay {
-            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-            z-index: 100000; display: flex; align-items: center; justify-content: center;
-            opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px;
-        }
+        /* UI overlays and dev panel remain the same */
+        #report-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); z-index: 100000; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; }
         #report-overlay.active { opacity: 1; pointer-events: auto; }
-
-        .report-modal {
-            background: #161616; border: 1px solid #333; border-radius: 20px;
-            width: 100%; max-width: 400px; padding: 28px 24px; position: relative;
-            box-shadow: 0 24px 48px rgba(0,0,0,0.8);
-            transform: translateY(20px) scale(0.95); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-        }
+        .report-modal { background: #161616; border: 1px solid #333; border-radius: 20px; width: 100%; max-width: 400px; padding: 28px 24px; position: relative; box-shadow: 0 24px 48px rgba(0,0,0,0.8); transform: translateY(20px) scale(0.95); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
         #report-overlay.active .report-modal { transform: translateY(0) scale(1); }
-
-        .btn-close-modal {
-            position: absolute; top: 16px; right: 16px; background: rgba(255,255,255,0.1); border: none;
-            color: #fff; width: 32px; height: 32px; border-radius: 50%; font-size: 18px; cursor: pointer;
-            display: flex; align-items: center; justify-content: center; transition: background 0.2s;
-        }
+        .btn-close-modal { position: absolute; top: 16px; right: 16px; background: rgba(255,255,255,0.1); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
         .btn-close-modal:active { background: rgba(255,255,255,0.2); }
-
         .report-modal h2 { font-size: 20px; margin-bottom: 16px; color: #fff; text-align: center; }
-
-        .report-alert {
-            background: rgba(250, 204, 21, 0.1); border-left: 4px solid #FACC15;
-            padding: 12px 16px; border-radius: 4px 8px 8px 4px; font-size: 12px; color: #FEF08A;
-            margin-bottom: 20px; line-height: 1.5; font-weight: 500;
-        }
-
+        .report-alert { background: rgba(250, 204, 21, 0.1); border-left: 4px solid #FACC15; padding: 12px 16px; border-radius: 4px 8px 8px 4px; font-size: 12px; color: #FEF08A; margin-bottom: 20px; line-height: 1.5; font-weight: 500; }
         .form-group { margin-bottom: 16px; }
         .form-group label { display: block; font-size: 12px; color: #aaa; margin-bottom: 6px; font-weight: 600; }
-        
-        .form-control {
-            width: 100%; background: #222; border: 1px solid #333; color: #fff;
-            padding: 12px 14px; border-radius: 12px; font-family: 'Montserrat', sans-serif;
-            font-size: 14px; outline: none; transition: border-color 0.2s;
-        }
+        .form-control { width: 100%; background: #222; border: 1px solid #333; color: #fff; padding: 12px 14px; border-radius: 12px; font-family: 'Montserrat', sans-serif; font-size: 14px; outline: none; transition: border-color 0.2s; }
         .form-control:focus { border-color: #666; }
         .form-control[readonly] { background: #1a1a1a; color: #777; cursor: not-allowed; }
         textarea.form-control { resize: none; height: 80px; }
-        
         input[type="file"].form-control { padding: 10px; font-size: 12px; color: #aaa; }
-        input[type="file"]::file-selector-button {
-            background: #333; color: #fff; border: none; padding: 6px 12px; border-radius: 6px;
-            margin-right: 12px; cursor: pointer; font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 11px;
-        }
-
-        .btn-submit {
-            width: 100%; background: #FFFFFF; color: #000000; border: none; padding: 14px;
-            border-radius: 12px; font-family: 'Montserrat', sans-serif; font-weight: 700;
-            font-size: 15px; cursor: pointer; margin-top: 8px; transition: transform 0.1s, opacity 0.2s;
-        }
+        input[type="file"]::file-selector-button { background: #333; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; margin-right: 12px; cursor: pointer; font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 11px; }
+        .btn-submit { width: 100%; background: #FFFFFF; color: #000000; border: none; padding: 14px; border-radius: 12px; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 8px; transition: transform 0.1s, opacity 0.2s; }
         .btn-submit:active { transform: scale(0.98); opacity: 0.9; }
         .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: scale(1); }
-
-        #toast {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.85);
-            background: rgba(26, 26, 26, 0.9); color: #fff; padding: 16px 32px; border-radius: 999px;
-            font-size: 14px; font-family: 'Montserrat', sans-serif; font-weight: 600;
-            border: 1px solid rgba(255, 255, 255, 0.15); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-            z-index: 1000000; transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
-            pointer-events: none; box-shadow: 0 16px 40px rgba(0,0,0,0.8);
-            display: flex; align-items: center; justify-content: center; white-space: nowrap;
-            opacity: 0; visibility: hidden;
-        }
+        #toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.85); background: rgba(26, 26, 26, 0.9); color: #fff; padding: 16px 32px; border-radius: 999px; font-size: 14px; font-family: 'Montserrat', sans-serif; font-weight: 600; border: 1px solid rgba(255, 255, 255, 0.15); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 1000000; transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); pointer-events: none; box-shadow: 0 16px 40px rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; white-space: nowrap; opacity: 0; visibility: hidden; }
         #toast.show { transform: translate(-50%, -50%) scale(1); opacity: 1; visibility: visible; }
-
-        /* ===================================================
-           FLOATING DRAGGABLE DEV PANEL
-           =================================================== */
-        #dev-panel {
-            position: fixed; top: 30px; left: 20px; width: 320px; height: 460px;
-            background: rgba(25, 25, 25, 0.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-            color: #fff; font-family: sans-serif; font-size: 13px;
-            border: 1px solid #444; border-radius: 12px; z-index: 10000;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8); display: flex; flex-direction: column; overflow: hidden;
-            pointer-events: auto; -webkit-user-select: auto; user-select: auto;
-        }
-
+        #dev-panel { position: fixed; top: 30px; left: 20px; width: 320px; height: 460px; background: rgba(25, 25, 25, 0.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: #fff; font-family: sans-serif; font-size: 13px; border: 1px solid #444; border-radius: 12px; z-index: 10000; box-shadow: 0 10px 30px rgba(0,0,0,0.8); display: flex; flex-direction: column; overflow: hidden; pointer-events: auto; -webkit-user-select: auto; user-select: auto; }
         #dev-header { background: #E8352A; color: white; padding: 12px; text-align: center; font-weight: bold; font-size: 15px; cursor: grab; user-select: none; display: flex; justify-content: space-between; align-items: center; }
         #dev-header:active { cursor: grabbing; }
         .dev-btn-group { display: flex; gap: 8px; }
@@ -420,7 +309,6 @@
         .control-group label { display: flex; justify-content: space-between; margin-bottom: 12px; font-weight: bold; color: #fff; text-transform: capitalize; }
         .control-group input[type="range"] { width: 100%; cursor: pointer; height: 20px; }
         .control-group span { color: #aaa; font-weight: normal; }
-
         #viewport-hud { position: fixed; top: 0; left: 0; background: #E8352A; color: #FFF; padding: 4px 8px; font-family: monospace; font-size: 11px; font-weight: bold; z-index: 999999; border-bottom-right-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.5); pointer-events: none; }
     </style>
 </head>
@@ -467,33 +355,13 @@
         <div class="report-modal">
             <button class="btn-close-modal" onclick="closeReportModal()">×</button>
             <h2>Report Merchant</h2>
-            
-            <div class="report-alert">
-                We apologise, it's not possible for us to refund your money from the merchant directly, but we can ban the merchant so they can't scam others.
-            </div>
-
+            <div class="report-alert">We apologise, it's not possible for us to refund your money from the merchant directly, but we can ban the merchant so they can't scam others.</div>
             <form id="report-form" onsubmit="submitReport(event)">
-                <div class="form-group">
-                    <label>Merchant Name</label>
-                    <input type="text" class="form-control" id="form-merchant-name" readonly>
-                </div>
-                <div class="form-group">
-                    <label>Your Name</label>
-                    <input type="text" class="form-control" id="form-user-name" placeholder="John Doe" required>
-                </div>
-                <div class="form-group">
-                    <label>Your Contact Details (Optional)</label>
-                    <input type="text" class="form-control" id="form-contact" placeholder="WhatsApp/Email/Telegram">
-                </div>
-                <div class="form-group">
-                    <label>Issue Details</label>
-                    <textarea class="form-control" id="form-message" placeholder="Describe the scam or issue..." required></textarea>
-                </div>
-                <div class="form-group">
-                    <label>Evidence</label>
-                    <input type="file" class="form-control" id="form-file" accept="image/*,video/*" multiple required>
-                </div>
-                
+                <div class="form-group"><label>Merchant Name</label><input type="text" class="form-control" id="form-merchant-name" readonly></div>
+                <div class="form-group"><label>Your Name</label><input type="text" class="form-control" id="form-user-name" placeholder="John Doe" required></div>
+                <div class="form-group"><label>Your Contact Details (Optional)</label><input type="text" class="form-control" id="form-contact" placeholder="WhatsApp/Email/Telegram"></div>
+                <div class="form-group"><label>Issue Details</label><textarea class="form-control" id="form-message" placeholder="Describe the scam or issue..." required></textarea></div>
+                <div class="form-group"><label>Evidence</label><input type="file" class="form-control" id="form-file" accept="image/*,video/*" multiple required></div>
                 <button type="submit" class="btn-submit" id="btn-submit-report">Submit Report</button>
             </form>
         </div>
@@ -511,6 +379,18 @@
     </div>
 
     <script>
+        // ==========================================
+        // CHANGED: The Ultimate Forceful Height Fix
+        // ==========================================
+        const appHeight = () => {
+            const doc = document.documentElement;
+            // Get exact physical pixel height and inject to CSS variable
+            doc.style.setProperty('--app-height', `${window.innerHeight}px`);
+        };
+        window.addEventListener('resize', appHeight);
+        window.addEventListener('orientationchange', appHeight);
+        appHeight(); // Run immediately on load
+
         // === REPORT MODAL & API LOGIC ===
         const reportOverlay = document.getElementById('report-overlay');
         const merchantNameDisplay = document.getElementById('display-merchant-name');
@@ -522,13 +402,8 @@
             reportOverlay.classList.add('active');
         }
 
-        function closeReportModal() {
-            reportOverlay.classList.remove('active');
-        }
-
-        reportOverlay.addEventListener('click', (e) => {
-            if(e.target === reportOverlay) closeReportModal();
-        });
+        function closeReportModal() { reportOverlay.classList.remove('active'); }
+        reportOverlay.addEventListener('click', (e) => { if(e.target === reportOverlay) closeReportModal(); });
 
         function showToast(msg) {
             const toast = document.getElementById('toast');
@@ -539,15 +414,12 @@
 
         async function submitReport(e) {
             e.preventDefault();
-            
             submitBtn.disabled = true;
             submitBtn.innerText = "Submitting...";
-
             const userName = document.getElementById('form-user-name').value;
             const userContact = document.getElementById('form-contact').value.trim() || 'Not provided';
             const userMessage = document.getElementById('form-message').value;
             const fileInput = document.getElementById('form-file');
-
             const combinedMessage = `[User Contact: ${userContact}]\n\n${userMessage}`;
 
             const fd = new FormData();
@@ -556,38 +428,15 @@
             fd.append("message", combinedMessage);
             
             if(fileInput.files.length > 0) {
-                for (let i = 0; i < fileInput.files.length; i++) {
-                    fd.append("media_file", fileInput.files[i]);
-                }
+                for (let i = 0; i < fileInput.files.length; i++) { fd.append("media_file", fileInput.files[i]); }
             }
 
             try {
-                await fetch("https://report-oorpay.by-oor.workers.dev/", {
-                    method: "POST",
-                    body: fd,
-                });
-                
-                closeReportModal();
-                document.getElementById('report-form').reset();
-                showToast("Report submitted successfully.");
-
-            } catch (err) {
-                console.error("Submission failed", err);
-                alert("Failed to submit report. Please try again.");
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.innerText = "Submit Report";
-            }
+                await fetch("https://report-oorpay.by-oor.workers.dev/", { method: "POST", body: fd });
+                closeReportModal(); document.getElementById('report-form').reset(); showToast("Report submitted successfully.");
+            } catch (err) { console.error("Submission failed", err); alert("Failed to submit report. Please try again.");
+            } finally { submitBtn.disabled = false; submitBtn.innerText = "Submit Report"; }
         }
-
-        // === SMOOTH SCROLL EVENT LISTENER ===
-        window.addEventListener('scroll', () => {
-            if (window.scrollY > 15) {
-                document.documentElement.classList.add('is-scrolled');
-            } else {
-                document.documentElement.classList.remove('is-scrolled');
-            }
-        }, { passive: true });
 
         // === DEV PANEL LOGIC ===
         function updateHUD() { document.getElementById('viewport-hud').innerText = `CSS Width: ${window.innerWidth}px`; }
@@ -597,7 +446,6 @@
         const cssVars = [
             { name: '--middle-group-x', min: -100, max: 100, unit: 'px' }, { name: '--middle-group-y', min: -200, max: 200, unit: 'px' },
             { name: '--bottom-group-x', min: -100, max: 100, unit: 'px' }, { name: '--bottom-group-y', min: -200, max: 200, unit: 'px' },
-            { name: '--bottom-group-y-scrolled', min: -200, max: 200, unit: 'px' },
             { name: '--logo-width', min: 60, max: 200, unit: 'px' },
             { name: '--report-btn-font-size', min: 10, max: 24, unit: 'px' },
             { name: '--report-btn-px', min: 0, max: 50, unit: 'px' }, { name: '--report-btn-py', min: 0, max: 30, unit: 'px' },
@@ -617,55 +465,26 @@
         ];
 
         const container = document.getElementById('controls-container');
-        
         function initSliders() {
-            container.innerHTML = '';
-            const computedStyle = getComputedStyle(document.documentElement);
+            container.innerHTML = ''; const computedStyle = getComputedStyle(document.documentElement);
             cssVars.forEach(v => {
-                const group = document.createElement('div');
-                group.className = 'control-group';
+                const group = document.createElement('div'); group.className = 'control-group';
                 let displayName = v.name.replace('--', '').replace(/-/g, ' ');
-                let rawValue = computedStyle.getPropertyValue(v.name).trim();
-                let numValue = rawValue ? parseFloat(rawValue) : 0; 
-                group.innerHTML = `
-                    <label>${displayName} <span id="${v.name}-val">${numValue}${v.unit}</span></label>
-                    <input type="range" id="${v.name}-slider" min="${v.min}" max="${v.max}" value="${numValue}" 
-                           oninput="updateVar('${v.name}', this.value, '${v.unit}')">
-                `;
+                let rawValue = computedStyle.getPropertyValue(v.name).trim(); let numValue = rawValue ? parseFloat(rawValue) : 0; 
+                group.innerHTML = `<label>${displayName} <span id="${v.name}-val">${numValue}${v.unit}</span></label><input type="range" id="${v.name}-slider" min="${v.min}" max="${v.max}" value="${numValue}" oninput="updateVar('${v.name}', this.value, '${v.unit}')">`;
                 container.appendChild(group);
             });
         }
-
-        function updateVar(name, val, unit) {
-            document.documentElement.style.setProperty(name, val + unit);
-            document.getElementById(name + '-val').innerText = val + unit;
-        }
-
-        function resetStyles() { document.documentElement.style = ''; initSliders(); }
+        function updateVar(name, val, unit) { document.documentElement.style.setProperty(name, val + unit); document.getElementById(name + '-val').innerText = val + unit; }
+        function resetStyles() { document.documentElement.style = ''; appHeight(); initSliders(); }
         window.addEventListener('load', initSliders);
-        window.addEventListener('resize', () => { if(document.documentElement.style.length === 0) initSliders(); });
         function toggleMinimize() { document.getElementById('dev-panel').classList.toggle('minimized'); }
 
         // --- DRAG LOGIC ---
-        const devPanel = document.getElementById('dev-panel');
-        const devHeader = document.getElementById('dev-header');
+        const devPanel = document.getElementById('dev-panel'); const devHeader = document.getElementById('dev-header');
         let isDragging = false, startX, startY, initialX, initialY;
-        function startDrag(e) {
-            if(e.target.tagName === 'BUTTON') return; 
-            isDragging = true;
-            const event = e.type.includes('mouse') ? e : e.touches[0];
-            startX = event.clientX; startY = event.clientY;
-            const rect = devPanel.getBoundingClientRect();
-            initialX = rect.left; initialY = rect.top;
-        }
-        function drag(e) {
-            if (!isDragging) return;
-            e.preventDefault(); 
-            const event = e.type.includes('mouse') ? e : e.touches[0];
-            const dx = event.clientX - startX; const dy = event.clientY - startY;
-            devPanel.style.left = `${initialX + dx}px`; devPanel.style.top = `${initialY + dy}px`;
-            devPanel.style.bottom = 'auto'; devPanel.style.right = 'auto'; 
-        }
+        function startDrag(e) { if(e.target.tagName === 'BUTTON') return; isDragging = true; const event = e.type.includes('mouse') ? e : e.touches[0]; startX = event.clientX; startY = event.clientY; const rect = devPanel.getBoundingClientRect(); initialX = rect.left; initialY = rect.top; }
+        function drag(e) { if (!isDragging) return; e.preventDefault(); const event = e.type.includes('mouse') ? e : e.touches[0]; const dx = event.clientX - startX; const dy = event.clientY - startY; devPanel.style.left = `${initialX + dx}px`; devPanel.style.top = `${initialY + dy}px`; devPanel.style.bottom = 'auto'; devPanel.style.right = 'auto'; }
         function endDrag() { isDragging = false; }
         devHeader.addEventListener('mousedown', startDrag); devHeader.addEventListener('touchstart', startDrag, {passive: false});
         document.addEventListener('mousemove', drag, {passive: false}); document.addEventListener('touchmove', drag, {passive: false});
