@@ -53,6 +53,8 @@
             --timer-max-width: 280px;
             --timer-mb: 20px;
             --timer-inset-top-bottom: 8px; 
+            
+            /* Default for Android/Windows */
             --timer-inset-left-right: 8px; 
             --timer-font-size: 30px;
             
@@ -74,6 +76,9 @@
             
             /* Undoes the Android -36px push so iOS stays perfectly flush */
             --bottom-group-y: 0px !important; 
+            
+            /* CHANGED: Forces 15px timer inset exclusively on Apple devices */
+            --timer-inset-left-right: 15px !important;
         }
 
         /* 2. MEDIUM MOBILE (421px - 480px) */
@@ -87,11 +92,9 @@
                 --report-btn-y: -5px;
 
                 --middle-group-x: 0px;
-                /* Android 421-480px range adjustment */
                 --middle-group-y: -32px; 
                 
                 --bottom-group-x: 0px;
-                /* Android push (Ignored by iOS) */
                 --bottom-group-y: -36px;
                 
                 --powered-by-height: 21px;
@@ -132,8 +135,6 @@
                 --middle-group-x: 0px;
                 --middle-group-y: -18px;
                 --bottom-group-x: 0px;
-                
-                /* Android push (Ignored by iOS) */
                 --bottom-group-y: -36px;
 
                 --merchant-mt: 100px;
@@ -151,7 +152,6 @@
                 --pay-via-mt: 19px;
                 --pay-via-width: 197px;
                 
-                /* Specifically for 392px Android range */
                 --timer-max-width: 311px;
                 
                 --timer-glass-x: 3px;
@@ -173,8 +173,6 @@
                 --report-btn-y: 0px;
 
                 --middle-group-y: -10px;
-                
-                /* Android push (Ignored by iOS) */
                 --bottom-group-y: -36px;
 
                 --merchant-mt: 60px;
@@ -197,6 +195,36 @@
                 --powered-by-height: 16px;
             }
             .app-canvas { padding: max(3vh, 15px) 20px env(safe-area-inset-bottom, 15px) 20px !important; }
+        }
+
+        /* ==================================================
+           5. DESKTOP / TABLET MODE (Wider than 480px)
+           ================================================== */
+        @media screen and (min-width: 481px) {
+            /* Expand canvas to fill monitor, pushing header left/right */
+            .app-canvas {
+                max-width: 100vw !important; 
+                padding: 0 4vw !important; 
+            }
+            
+            /* Keeps the Logo and Report button on absolute far sides */
+            .navbar {
+                width: 100%;
+                max-width: 1400px; /* Optional: Stops it from looking silly on 4K monitors */
+                margin: 0 auto;
+                padding-top: 40px;
+            }
+            
+            /* Forces QR and Payment elements to act like a centered mobile phone column */
+            .middle-container, .bottom-container {
+                width: 100%;
+                max-width: var(--page-max-width); 
+                margin-left: auto;
+                margin-right: auto;
+            }
+            .spacer {
+                max-width: var(--page-max-width);
+            }
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -353,6 +381,8 @@
                 <img src="https://gist.githack.com/OTTONRENT01/a8c8a6722574f5a64cc6d429768d8bdd/raw/8b6d145efd5b1ad03e697a693f2d2a4e0a7000c7/Pay-via.svg" class="pay-via-img" alt="Pay via any UPI app">
             </div>
         </div>
+
+        <div class="spacer"></div>
 
         <div class="bottom-container">
             <div class="timer-section">
