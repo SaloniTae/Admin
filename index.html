@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>OOR Pay - Dev Workspace</title>
+    <title>OOR Pay - Production</title>
     <style>
         /* Fonts */
         @font-face {
@@ -55,15 +55,22 @@
             --timer-inset-top-bottom: 8px; 
             --timer-inset-left-right: 8px; 
             --timer-font-size: 30px;
-            /* iOS Safari font baseline patch */
-            --timer-text-y: -3px; 
+            
+            /* Default to 0px for Android/Chrome/Windows */
+            --timer-text-y: 0px; 
+            
             --timer-glass-x: 0px;
             --timer-glass-y: 0px;
             --footer-mb: 24px;
             --powered-by-height: 14px;
         }
 
-        /* 2. MEDIUM MOBILE */
+        /* CHANGED: Apply font baseline patch strictly for Apple iOS devices */
+        html.is-ios {
+            --timer-text-y: -3px;
+        }
+
+        /* 2. MEDIUM MOBILE (421px - 480px) */
         @media screen and (min-width: 421px) and (max-width: 480px) {
             :root {
                 --logo-width: 163px;
@@ -74,7 +81,9 @@
                 --report-btn-y: -5px;
 
                 --middle-group-x: 0px;
-                --middle-group-y: -2px;
+                /* CHANGED: Updated Middle Group Y for this specific range */
+                --middle-group-y: -17px; 
+                
                 --bottom-group-x: 0px;
                 --bottom-group-y: 0px;
                 
@@ -204,7 +213,7 @@
 
         /* CONTAINER 1: HEADER */
         .navbar { 
-            flex: 0 0 auto; /* Never shrink */
+            flex: 0 0 auto; 
             height: max(50px, 7vh); 
             display: flex; justify-content: space-between; align-items: center; 
         }
@@ -217,15 +226,14 @@
         }
         .btn-report:active { background: rgba(232, 53, 42, 0.1); }
         
-        /* CONTAINER 2: MIDDLE (Dynamically squishes) */
+        /* CONTAINER 2: MIDDLE */
         .middle-container { 
-            flex: 1 1 0%; /* Absorbs empty space, shrinks if needed */
+            flex: 1 1 0%; 
             width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; 
-            min-height: 0; /* Prevents overflow when crushed by toolbars */
+            min-height: 0; 
             transform: translate(var(--middle-group-x), var(--middle-group-y)); 
         }
         
-        /* Margins and Dimensions are clamped by vh to prevent blowing out on short screens */
         .merchant-row { margin-top: min(var(--merchant-mt), 4vh); display: flex; justify-content: center; align-items: center; gap: 8px; }
         .merchant-name { font-size: var(--merchant-font-size); text-align: center; }
         .verified-badge { width: var(--verified-badge-width); height: auto; }
@@ -243,7 +251,7 @@
 
         /* CONTAINER 3: BOTTOM */
         .bottom-container { 
-            flex: 0 0 auto; /* Never shrink */
+            flex: 0 0 auto; 
             width: 100%; z-index: 50;
             transform: translate(var(--bottom-group-x), var(--bottom-group-y)); 
         }
@@ -291,6 +299,8 @@
         .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: scale(1); }
         #toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.85); background: rgba(26, 26, 26, 0.9); color: #fff; padding: 16px 32px; border-radius: 999px; font-size: 14px; font-family: 'Montserrat', sans-serif; font-weight: 600; border: 1px solid rgba(255, 255, 255, 0.15); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 1000000; transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); pointer-events: none; box-shadow: 0 16px 40px rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; white-space: nowrap; opacity: 0; visibility: hidden; }
         #toast.show { transform: translate(-50%, -50%) scale(1); opacity: 1; visibility: visible; }
+        
+        /* Keep Dev Panel hidden in absolute production, but left here for your testing */
         #dev-panel { position: fixed; top: 30px; left: 20px; width: 320px; height: 460px; background: rgba(25, 25, 25, 0.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: #fff; font-family: sans-serif; font-size: 13px; border: 1px solid #444; border-radius: 12px; z-index: 10000; box-shadow: 0 10px 30px rgba(0,0,0,0.8); display: flex; flex-direction: column; overflow: hidden; pointer-events: auto; -webkit-user-select: auto; user-select: auto; }
         #dev-header { background: #E8352A; color: white; padding: 12px; text-align: center; font-weight: bold; font-size: 15px; cursor: grab; user-select: none; display: flex; justify-content: space-between; align-items: center; }
         #dev-header:active { cursor: grabbing; }
@@ -373,6 +383,21 @@
     </div>
 
     <script>
+        // ==========================================
+        // CHANGED: PRODUCTION IOS DETECTION
+        // ==========================================
+        // Reliably detects iPhone, old iPads, and new iPads requesting Desktop Sites
+        const isIOS = [
+            'iPad Simulator', 'iPhone Simulator', 'iPod Simulator',
+            'iPad', 'iPhone', 'iPod'
+        ].includes(navigator.platform)
+        // iPad on iOS 13+ detection
+        || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
+
+        if (isIOS) {
+            document.documentElement.classList.add('is-ios');
+        }
+
         // Exact viewport calculation
         const appHeight = () => { document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`); };
         window.addEventListener('resize', appHeight);
