@@ -65,10 +65,15 @@
             --powered-by-height: 14px;
         }
 
-        /* Apply font baseline patch strictly for Apple iOS devices */
+        /* ==================================================
+           IOS SPECIFIC OVERRIDES (Takes priority over all) 
+           ================================================== */
         html.is-ios {
-            /* CHANGED: Adjusted to -5px */
+            /* Fixes Apple font baseline bug */
             --timer-text-y: -5px; 
+            
+            /* Undoes the Android -36px push so iOS stays perfectly flush */
+            --bottom-group-y: 0px !important; 
         }
 
         /* 2. MEDIUM MOBILE (421px - 480px) */
@@ -82,11 +87,11 @@
                 --report-btn-y: -5px;
 
                 --middle-group-x: 0px;
-                /* CHANGED: -32px for this range */
+                /* Android 421-480px range adjustment */
                 --middle-group-y: -32px; 
                 
                 --bottom-group-x: 0px;
-                /* CHANGED: -36px */
+                /* Android push (Ignored by iOS) */
                 --bottom-group-y: -36px;
                 
                 --powered-by-height: 21px;
@@ -127,7 +132,8 @@
                 --middle-group-x: 0px;
                 --middle-group-y: -18px;
                 --bottom-group-x: 0px;
-                /* CHANGED: -36px */
+                
+                /* Android push (Ignored by iOS) */
                 --bottom-group-y: -36px;
 
                 --merchant-mt: 100px;
@@ -145,7 +151,7 @@
                 --pay-via-mt: 19px;
                 --pay-via-width: 197px;
                 
-                /* CHANGED: 311px for 392px Android range */
+                /* Specifically for 392px Android range */
                 --timer-max-width: 311px;
                 
                 --timer-glass-x: 3px;
@@ -167,7 +173,8 @@
                 --report-btn-y: 0px;
 
                 --middle-group-y: -10px;
-                /* CHANGED: -36px applied to all sub-480 ranges */
+                
+                /* Android push (Ignored by iOS) */
                 --bottom-group-y: -36px;
 
                 --merchant-mt: 60px;
