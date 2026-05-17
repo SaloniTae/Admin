@@ -19,7 +19,7 @@
 
         /* 1. GLOBAL VARIABLES */
         :root {
-            --app-height: 100vh; /* Fallback until JS takes over */
+            --app-height: 100vh;
             
             --page-max-width: 430px;
             --logo-width: 120px;
@@ -55,7 +55,8 @@
             --timer-inset-top-bottom: 8px; 
             --timer-inset-left-right: 8px; 
             --timer-font-size: 30px;
-            --timer-text-y: 0px; 
+            /* iOS Safari font baseline patch */
+            --timer-text-y: -3px; 
             --timer-glass-x: 0px;
             --timer-glass-y: 0px;
             --footer-mb: 24px;
@@ -74,7 +75,6 @@
 
                 --middle-group-x: 0px;
                 --middle-group-y: -2px;
-                
                 --bottom-group-x: 0px;
                 --bottom-group-y: 0px;
                 
@@ -174,54 +174,41 @@
                 --timer-font-size: 22px;
                 --powered-by-height: 16px;
             }
-            .app-canvas { padding: 0 20px; }
+            .app-canvas { padding: max(3vh, 15px) 20px env(safe-area-inset-bottom, 15px) 20px !important; }
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        /* CHANGED: Forceful rigid body lock */
         html, body {
-            height: 100%;
-            width: 100%;
-            overflow: hidden; /* Stops native scrolling */
-            overscroll-behavior-y: none; /* Stops iOS rubber-banding */
+            height: 100%; width: 100%;
+            overflow: hidden; 
+            overscroll-behavior-y: none; 
         }
 
         body {
-            background-color: #000000;
-            color: #FFFFFF;
-            font-family: 'Montserrat', sans-serif;
-            display: flex;
-            justify-content: center;
-            -webkit-tap-highlight-color: transparent; 
+            background-color: #000000; color: #FFFFFF; font-family: 'Montserrat', sans-serif;
+            display: flex; justify-content: center; -webkit-tap-highlight-color: transparent; 
         }
 
-        /* CHANGED: Binds directly to the JS calculated height */
+        /* MASTER FLEX COLUMN */
         .app-canvas {
-            width: 100%;
-            max-width: var(--page-max-width);
-            height: var(--app-height); 
-            display: flex;
-            flex-direction: column;
-            padding: 0 32px;
-            position: relative;
-            margin: 0 auto;
-            -webkit-touch-callout: none; 
-            -webkit-user-select: none; 
-            user-select: none;
-            overflow-y: auto; /* Allow internal scrolling if content is huge */
-            overscroll-behavior-y: contain;
+            width: 100%; max-width: var(--page-max-width); height: var(--app-height); 
+            display: flex; flex-direction: column; justify-content: space-between;
+            padding: max(4vh, 20px) 32px env(safe-area-inset-bottom, 20px) 32px;
+            position: relative; margin: 0 auto;
+            -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+            overflow: hidden; 
         }
 
-        .app-canvas img {
-            pointer-events: none; 
-            -webkit-user-drag: none; 
-            user-drag: none;
-        }
+        .app-canvas img { pointer-events: none; -webkit-user-drag: none; user-drag: none; }
 
-        .navbar { padding-top: 32px; height: 80px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-        .logo-img { width: var(--logo-width); height: auto; }
-        
+        /* CONTAINER 1: HEADER */
+        .navbar { 
+            flex: 0 0 auto; /* Never shrink */
+            height: max(50px, 7vh); 
+            display: flex; justify-content: space-between; align-items: center; 
+        }
+        .logo-img { width: min(var(--logo-width), 40vw); height: auto; }
         .btn-report { 
             font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: var(--report-btn-font-size); 
             color: #E8352A; background: transparent; border: 1.5px solid #E8352A; border-radius: 999px; 
@@ -230,35 +217,42 @@
         }
         .btn-report:active { background: rgba(232, 53, 42, 0.1); }
         
-        .middle-container { width: 100%; transform: translate(var(--middle-group-x), var(--middle-group-y)); flex-shrink: 0; }
-        .merchant-row { margin-top: var(--merchant-mt); display: flex; justify-content: center; align-items: center; gap: 8px; }
+        /* CONTAINER 2: MIDDLE (Dynamically squishes) */
+        .middle-container { 
+            flex: 1 1 0%; /* Absorbs empty space, shrinks if needed */
+            width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            min-height: 0; /* Prevents overflow when crushed by toolbars */
+            transform: translate(var(--middle-group-x), var(--middle-group-y)); 
+        }
+        
+        /* Margins and Dimensions are clamped by vh to prevent blowing out on short screens */
+        .merchant-row { margin-top: min(var(--merchant-mt), 4vh); display: flex; justify-content: center; align-items: center; gap: 8px; }
         .merchant-name { font-size: var(--merchant-font-size); text-align: center; }
         .verified-badge { width: var(--verified-badge-width); height: auto; }
         
-        .qr-section { margin: var(--qr-mt) auto 0 auto; width: 100%; max-width: var(--qr-max-width); position: relative; display: flex; justify-content: center; align-items: center; }
+        .qr-section { 
+            margin: min(var(--qr-mt), 4vh) auto 0 auto; 
+            width: 100%; max-width: min(var(--qr-max-width), 35vh); 
+            position: relative; display: flex; justify-content: center; align-items: center; 
+        }
         .qr-glass { width: 100%; height: auto; display: block; z-index: 2; margin: 0 auto; transform: translate(var(--qr-glass-x), var(--qr-glass-y)); }
         .qr-code { position: absolute; top: 50%; left: 50%; transform: translate(calc(-50% + var(--qr-code-x)), calc(-50% + var(--qr-code-y))); width: var(--qr-inner-scale); z-index: 1; }
         
-        .pay-via-section { margin-top: var(--pay-via-mt); display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; }
-        .pay-via-img { width: var(--pay-via-width); height: auto; margin: 0 auto; display: block; transform: translateX(var(--pay-via-x)); }
-        
-        /* CHANGED: Spring-loaded spacer. This pushes the bottom container down physically */
-        .spacer { 
-            flex-grow: 1; 
-            min-height: 20px; 
-        }
+        .pay-via-section { margin-top: min(var(--pay-via-mt), 4vh); display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; }
+        .pay-via-img { width: min(var(--pay-via-width), 35vh); height: auto; margin: 0 auto; display: block; transform: translateX(var(--pay-via-x)); }
 
-        /* CHANGED: Removed buggy sticky positioning. Now relies purely on Flexbox pushing it to the floor */
+        /* CONTAINER 3: BOTTOM */
         .bottom-container { 
-            width: 100%; 
-            margin-top: auto; 
-            z-index: 50;
+            flex: 0 0 auto; /* Never shrink */
+            width: 100%; z-index: 50;
             transform: translate(var(--bottom-group-x), var(--bottom-group-y)); 
-            padding-bottom: env(safe-area-inset-bottom, 20px); 
-            flex-shrink: 0;
         }
 
-        .timer-section { width: 100%; max-width: var(--timer-max-width); margin: 0 auto var(--timer-mb) auto; position: relative; display: flex; justify-content: center; align-items: center; }
+        .timer-section { 
+            width: 100%; max-width: min(var(--timer-max-width), 45vh); 
+            margin: 0 auto min(var(--timer-mb), 2vh) auto; 
+            position: relative; display: flex; justify-content: center; align-items: center; 
+        }
         .timer-inner-pill { position: absolute; top: var(--timer-inset-top-bottom); bottom: var(--timer-inset-top-bottom); left: var(--timer-inset-left-right); right: var(--timer-inset-left-right); background-color: #FFFFFF; border-radius: 999px; z-index: 1; }
         .timer-glass { width: 100%; height: auto; display: block; position: relative; z-index: 2; margin: 0 auto; transform: translate(var(--timer-glass-x), var(--timer-glass-y)); }
         
@@ -272,10 +266,10 @@
             transform: translateY(var(--timer-text-y));
         }
 
-        .footer { margin-bottom: var(--footer-mb); display: flex; justify-content: center; align-items: center; width: 100%; }
+        .footer { margin-bottom: min(var(--footer-mb), 2vh); display: flex; justify-content: center; align-items: center; width: 100%; }
         .powered-by-img { height: var(--powered-by-height); width: auto; margin: 0 auto; display: block; }
 
-        /* UI overlays and dev panel remain the same */
+        /* MODALS & DEV PANEL */
         #report-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); z-index: 100000; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; }
         #report-overlay.active { opacity: 1; pointer-events: auto; }
         .report-modal { background: #161616; border: 1px solid #333; border-radius: 20px; width: 100%; max-width: 400px; padding: 28px 24px; position: relative; box-shadow: 0 24px 48px rgba(0,0,0,0.8); transform: translateY(20px) scale(0.95); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -318,6 +312,7 @@
     <div id="toast">Report submitted successfully.</div>
 
     <div class="app-canvas">
+        
         <header class="navbar">
             <img src="https://gist.githack.com/OTTONRENT01/a8c8a6722574f5a64cc6d429768d8bdd/raw/8b6d145efd5b1ad03e697a693f2d2a4e0a7000c7/OORPay.svg" alt="OOR Pay" class="logo-img">
             <button class="btn-report" onclick="openReportModal()">Report</button>
@@ -337,8 +332,6 @@
             </div>
         </div>
 
-        <div class="spacer"></div>
-
         <div class="bottom-container">
             <div class="timer-section">
                 <div class="timer-inner-pill"></div>
@@ -349,6 +342,7 @@
                 <img src="https://gist.githack.com/OTTONRENT01/a8c8a6722574f5a64cc6d429768d8bdd/raw/8b6d145efd5b1ad03e697a693f2d2a4e0a7000c7/Powered-by.svg" class="powered-by-img" alt="Powered by OOR Pay">
             </footer>
         </div>
+        
     </div>
 
     <div id="report-overlay">
@@ -379,43 +373,30 @@
     </div>
 
     <script>
-        // ==========================================
-        // CHANGED: The Ultimate Forceful Height Fix
-        // ==========================================
-        const appHeight = () => {
-            const doc = document.documentElement;
-            // Get exact physical pixel height and inject to CSS variable
-            doc.style.setProperty('--app-height', `${window.innerHeight}px`);
-        };
+        // Exact viewport calculation
+        const appHeight = () => { document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`); };
         window.addEventListener('resize', appHeight);
         window.addEventListener('orientationchange', appHeight);
-        appHeight(); // Run immediately on load
+        appHeight(); 
 
-        // === REPORT MODAL & API LOGIC ===
         const reportOverlay = document.getElementById('report-overlay');
         const merchantNameDisplay = document.getElementById('display-merchant-name');
         const merchantInput = document.getElementById('form-merchant-name');
         const submitBtn = document.getElementById('btn-submit-report');
 
-        function openReportModal() {
-            merchantInput.value = merchantNameDisplay.innerText;
-            reportOverlay.classList.add('active');
-        }
-
+        function openReportModal() { merchantInput.value = merchantNameDisplay.innerText; reportOverlay.classList.add('active'); }
         function closeReportModal() { reportOverlay.classList.remove('active'); }
         reportOverlay.addEventListener('click', (e) => { if(e.target === reportOverlay) closeReportModal(); });
 
         function showToast(msg) {
             const toast = document.getElementById('toast');
-            toast.innerText = msg;
-            toast.classList.add('show');
+            toast.innerText = msg; toast.classList.add('show');
             setTimeout(() => { toast.classList.remove('show'); }, 3000);
         }
 
         async function submitReport(e) {
             e.preventDefault();
-            submitBtn.disabled = true;
-            submitBtn.innerText = "Submitting...";
+            submitBtn.disabled = true; submitBtn.innerText = "Submitting...";
             const userName = document.getElementById('form-user-name').value;
             const userContact = document.getElementById('form-contact').value.trim() || 'Not provided';
             const userMessage = document.getElementById('form-message').value;
@@ -424,8 +405,7 @@
 
             const fd = new FormData();
             fd.append("merchant_name", merchantInput.value); 
-            fd.append("name", userName);
-            fd.append("message", combinedMessage);
+            fd.append("name", userName); fd.append("message", combinedMessage);
             
             if(fileInput.files.length > 0) {
                 for (let i = 0; i < fileInput.files.length; i++) { fd.append("media_file", fileInput.files[i]); }
@@ -438,10 +418,8 @@
             } finally { submitBtn.disabled = false; submitBtn.innerText = "Submit Report"; }
         }
 
-        // === DEV PANEL LOGIC ===
         function updateHUD() { document.getElementById('viewport-hud').innerText = `CSS Width: ${window.innerWidth}px`; }
-        window.addEventListener('resize', updateHUD);
-        updateHUD();
+        window.addEventListener('resize', updateHUD); updateHUD();
 
         const cssVars = [
             { name: '--middle-group-x', min: -100, max: 100, unit: 'px' }, { name: '--middle-group-y', min: -200, max: 200, unit: 'px' },
@@ -480,7 +458,6 @@
         window.addEventListener('load', initSliders);
         function toggleMinimize() { document.getElementById('dev-panel').classList.toggle('minimized'); }
 
-        // --- DRAG LOGIC ---
         const devPanel = document.getElementById('dev-panel'); const devHeader = document.getElementById('dev-header');
         let isDragging = false, startX, startY, initialX, initialY;
         function startDrag(e) { if(e.target.tagName === 'BUTTON') return; isDragging = true; const event = e.type.includes('mouse') ? e : e.touches[0]; startX = event.clientX; startY = event.clientY; const rect = devPanel.getBoundingClientRect(); initialX = rect.left; initialY = rect.top; }
@@ -490,7 +467,6 @@
         document.addEventListener('mousemove', drag, {passive: false}); document.addEventListener('touchmove', drag, {passive: false});
         document.addEventListener('mouseup', endDrag); document.addEventListener('touchend', endDrag);
 
-        // --- TIMER LOGIC ---
         const timerDisplay = document.getElementById('countdown-timer');
         let timeLeft = (4 * 60) + 58;
         setInterval(() => {
